@@ -8,6 +8,12 @@ import com.ideabridge.app.SaveResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 
+data class Snapshot(
+    val galaxies: List<GalaxyEntity>,
+    val notes: List<IdeaEntity>,
+    val relations: List<RelationEntity>,
+)
+
 class IdeaRepository(
     private val db: IdeaBridgeDatabase,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -35,6 +41,13 @@ class IdeaRepository(
                 )
             }
         }
+    }
+
+    fun observeRelationsInGalaxy(galaxyId: Long): Flow<List<RelationEntity>> = dao.observeRelationsInGalaxy(galaxyId)
+
+    /** لقطة كاملة من البيانات للنسخة الاحتياطية. */
+    suspend fun loadSnapshot(): SaveResult<Snapshot> = safely {
+        db.withTransaction { Snapshot(dao.getAllGalaxies(), dao.getAllIdeas(), dao.getAllRelations()) }
     }
 
     // ---------- المجرات ----------

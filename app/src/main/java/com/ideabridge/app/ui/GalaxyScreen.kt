@@ -1,12 +1,16 @@
 package com.ideabridge.app.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -14,12 +18,18 @@ import com.ideabridge.app.Loaded
 import com.ideabridge.app.R
 import com.ideabridge.app.data.GalaxyEntity
 import com.ideabridge.app.data.IdeaEntity
+import com.ideabridge.app.data.RelationEntity
+import com.ideabridge.app.engine.LinkStrength
+import com.ideabridge.app.engine.LinkSuggestion
 
-/** داخل المجرة: ملاحظاتها مع بحث خاص بها، وإجراءات إعادة التسمية والحذف. */
+/** داخل المجرة: عرض الكواكب (الافتراضي) أو القائمة، مع اقتراحات الروابط وإجراءات المجرة. */
 @Composable
 fun GalaxyScreen(
     state: Loaded<GalaxyEntity>?,
-    notes: List<IdeaEntity>?,
+    allNotes: List<IdeaEntity>,
+    listNotes: List<IdeaEntity>?,
+    relations: List<RelationEntity>,
+    suggestions: List<LinkSuggestion>,
     query: String,
     onQueryChange: (String) -> Unit,
     onBack: () -> Unit,
@@ -27,9 +37,13 @@ fun GalaxyScreen(
     onNewNote: () -> Unit,
     onRename: (name: String, colorIndex: Int) -> Unit,
     onDelete: () -> Unit,
+    onAcceptSuggestion: (LinkSuggestion) -> Unit,
+    onRejectSuggestion: (String) -> Unit,
 ) {
     var showRename by rememberSaveable { mutableStateOf(false) }
     var showDelete by rememberSaveable { mutableStateOf(false) }
+    var planetsMode by rememberSaveable { mutableStateOf(true) }
+    var showSuggestions by rememberSaveable { mutableStateOf(true) }
     val galaxy = state?.value
 
     SpaceBackground {
@@ -50,16 +64,61 @@ fun GalaxyScreen(
             when {
                 state == null -> Unit
                 galaxy == null -> Text(stringResource(R.string.galaxy_not_found), Modifier.padding(16.dp))
-                else -> IdeasScreen(
-                    ideas = notes,
-                    query = query,
-                    onQueryChange = onQueryChange,
-                    onOpen = onOpenNote,
-                    onAdd = onNewNote,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    emptyTitle = stringResource(R.string.galaxy_empty_title),
-                    emptyBody = stringResource(R.string.galaxy_empty_body),
-                )
+                else -> {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        FilterChip(
+                            selected = planetsMode, onClick = { planetsMode = true },
+                            label = { Text(stringResource(R.string.mode_planets)) },
+                        )
+                        FilterChip(
+                            selected = !planetsMode, onClick = { planetsMode = false },
+                            label = { Text(stringResource(R.string.mode_list)) },
+                        )
+                        if (planetsMode) {
+                            FilterChip(
+                                selected = showSuggestions, onClick = { showSuggestions = !showSuggestions },
+                                label = { Text(stringResource(R.string.suggestions_chip, suggestions.size)) },
+                            )
+                        }
+                    }
+                    if (planetsMode) {
+                        Box(Modifier.weight(1f).fillMaxWidth()) {
+                            GalaxyGraph(
+                                notes = allNotes,
+                                relations = relations,
+                                suggestions = suggestions,
+                                showSuggestions = showSuggestions,
+                                color = galaxyColor(galaxy.colorIndex),
+                                onOpenNote = onOpenNote,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                            ExtendedFloatingActionButton(
+                                onClick = onNewNote,
+                                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                                text = { Text(stringResource(R.string.new_note)) },
+                            )
+                        }
+                        if (showSuggestions && suggestions.isNotEmpty()) {
+                            SuggestionPanel(suggestions, allNotes, onAcceptSuggestion, onRejectSuggestion)
+                        }
+                    } else {
+                        IdeasScreen(
+                            ideas = listNotes,
+                            query = query,
+                            onQueryChange = onQueryChange,
+                            onOpen = onOpenNote,
+                            onAdd = onNewNote,
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            emptyTitle = stringResource(R.string.galaxy_empty_title),
+                            emptyBody = stringResource(R.string.galaxy_empty_body),
+                        )
+                    }
+                }
             }
         }
     }
@@ -82,5 +141,59 @@ fun GalaxyScreen(
             onConfirm = { showDelete = false; onDelete() },
             onDismiss = { showDelete = false },
         )
+    }
+}
+
+@Composable
+private fun SuggestionPanel(
+    suggestions: List<LinkSuggestion>,
+    notes: List<IdeaEntity>,
+    onAccept: (LinkSuggestion) -> Unit,
+    onReject: (String) -> Unit,
+) {
+    val titles = remember(notes) { notes.associate { it.id to it.title } }
+    Column(Modifier.fillMaxWidth().heightIn(max = 260.dp).padding(horizontal = 16.dp)) {
+        Text(
+            stringResource(R.string.suggestions_disclaimer),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 4.dp),
+        )
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
+            items(suggestions, key = { it.key }) { s ->
+                val strength = stringResource(
+                    when (s.strength) {
+                        LinkStrength.STRONG -> R.string.strength_strong
+                        LinkStrength.MEDIUM -> R.string.strength_medium
+                        LinkStrength.WEAK -> R.string.strength_weak
+                    }
+                )
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    ),
+                ) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            stringResource(R.string.suggestion_pair, titles[s.firstId].orEmpty(), titles[s.secondId].orEmpty()),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            stringResource(
+                                R.string.suggestion_reason,
+                                s.sharedTerms.joinToString("، ") { "«$it»" }, s.score, strength,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { onAccept(s) }) { Text(stringResource(R.string.suggestion_accept)) }
+                            OutlinedButton(onClick = { onReject(s.key) }) { Text(stringResource(R.string.suggestion_reject)) }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

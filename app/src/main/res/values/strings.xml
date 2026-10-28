@@ -94,4 +94,28 @@
     <string name="err_galaxy_name_too_long">اسم المجرة طويل جدًا (الحد الأقصى 40 حرفًا)</string>
     <string name="err_galaxy_not_found">المجرة غير موجودة، ربما حُذفت</string>
     <string name="err_unknown">تعذر إتمام العملية ولم يُحفظ شيء. حاول مرة أخرى</string>
+
+    <!-- عرض الكواكب والاقتراحات -->
+    <string name="mode_planets">كواكب</string>
+    <string name="mode_list">قائمة</string>
+    <string name="suggestions_chip">اقتراحات (%1$d)</string>
+    <string name="graph_empty">لا توجد كواكب بعد. أضف ملاحظة وستظهر هنا ككوكب.</string>
+    <string name="graph_hint">اسحب للتحريك، واقرص للتكبير، والمس كوكبًا لفتحه</string>
+    <string name="suggestions_disclaimer">اقتراحات مبنية على الكلمات المشتركة فقط، وليست فهمًا للمعنى ولا نتيجة مؤكدة. تظهر في الرسم خطوطًا متقطعة.</string>
+    <string name="suggestion_pair">«%1$s» و«%2$s»</string>
+    <string name="suggestion_reason">تتشاركان: %1$s — تشابه نصي %2$d من 100 (%3$s)</string>
+    <string name="suggestion_accept">قبول الرابط</string>
+    <string name="suggestion_reject">رفض</string>
+    <string name="strength_strong">قوي</string>
+    <string name="strength_medium">متوسط</string>
+    <string name="strength_weak">ضعيف</string>
+
+    <!-- الإعدادات -->
+    <string name="backup_title">نسخة احتياطية</string>
+    <string name="backup_body">تُحفظ ملاحظاتك على هذا الجهاز فقط. صدّرها إلى ملف JSON تختار مكانه، لتحتفظ بنسخة إن فقدت الهاتف أو حذفت التطبيق.</string>
+    <string name="backup_button">تصدير نسخة احتياطية</string>
+    <string name="backup_done">تم حفظ النسخة الاحتياطية</string>
+    <string name="backup_failed">تعذر حفظ النسخة الاحتياطية</string>
+    <string name="privacy_title">الخصوصية</string>
+    <string name="privacy_body">لا يتصل التطبيق بالإنترنت ولا يطلب أي إذن. التحليل الذي يقترح الروابط يجري على جهازك فقط.</string>
 </resources>

@@ -201,6 +201,43 @@ class GalaxyRepositoryTest {
     }
 }
 
+@RunWith(AndroidJUnit4::class)
+class SnapshotAndGraphQueryTest {
+    private lateinit var db: IdeaBridgeDatabase
+    private lateinit var repo: IdeaRepository
+
+    @Before fun setUp() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        db = Room.inMemoryDatabaseBuilder(context, IdeaBridgeDatabase::class.java).build()
+        repo = IdeaRepository(db)
+    }
+
+    @After fun tearDown() { db.close() }
+
+    @Test fun snapshotContainsEverythingForBackup() = runBlocking {
+        val g = (repo.createGalaxy("مجرتي", 1) as SaveResult.Success).value
+        val a = (repo.addIdea("أ", "نص أ", g) as SaveResult.Success).value
+        val b = (repo.addIdea("ب", null, g) as SaveResult.Success).value
+        repo.addRelation(a, b, RelationType.SIMILARITY)
+        val snap = (repo.loadSnapshot() as SaveResult.Success).value
+        assertEquals(1, snap.galaxies.size)
+        assertEquals(2, snap.notes.size)
+        assertEquals(1, snap.relations.size)
+    }
+
+    @Test fun graphRelationsOnlyIncludeLinksInsideTheGalaxy() = runBlocking {
+        val g1 = (repo.createGalaxy("1", 0) as SaveResult.Success).value
+        val g2 = (repo.createGalaxy("2", 1) as SaveResult.Success).value
+        val a = (repo.addIdea("أ", null, g1) as SaveResult.Success).value
+        val b = (repo.addIdea("ب", null, g1) as SaveResult.Success).value
+        val c = (repo.addIdea("ج", null, g2) as SaveResult.Success).value
+        repo.addRelation(a, b, RelationType.CAUSE)   // داخل g1
+        repo.addRelation(a, c, RelationType.CAUSE)   // بين مجرتين: لا يظهر في رسم أي منهما
+        assertEquals(1, repo.observeRelationsInGalaxy(g1).first().size)
+        assertEquals(0, repo.observeRelationsInGalaxy(g2).first().size)
+    }
+}
+
 /** يتحقق من بقاء البيانات بعد إغلاق قاعدة البيانات وإعادة فتح الملف نفسه (محاكاة إعادة تشغيل التطبيق). */
 @RunWith(AndroidJUnit4::class)
 class PersistenceTest {

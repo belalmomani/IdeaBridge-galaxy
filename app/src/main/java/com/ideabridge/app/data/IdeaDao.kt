@@ -99,4 +99,11 @@ interface IdeaDao {
             "ORDER BY updatedAt DESC, id DESC"
     )
     fun observeInGalaxy(galaxyId: Long, pattern: String): Flow<List<IdeaEntity>>
+
+    /** الروابط التي يقع طرفاها داخل المجرة نفسها (للرسم). */
+    @Query(
+        "SELECT * FROM relations WHERE firstIdeaId IN (SELECT id FROM ideas WHERE galaxyId = :galaxyId) " +
+            "AND secondIdeaId IN (SELECT id FROM ideas WHERE galaxyId = :galaxyId) ORDER BY id"
+    )
+    fun observeRelationsInGalaxy(galaxyId: Long): Flow<List<RelationEntity>>
 }

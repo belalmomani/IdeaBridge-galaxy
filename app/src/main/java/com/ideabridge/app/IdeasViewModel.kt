@@ -8,19 +8,30 @@ import com.ideabridge.app.data.GalaxyRow
 import com.ideabridge.app.data.IdeaBridgeDatabase
 import com.ideabridge.app.data.IdeaEntity
 import com.ideabridge.app.data.IdeaRepository
+import com.ideabridge.app.data.RelationEntity
 import com.ideabridge.app.data.RelationRow
 import com.ideabridge.app.data.RelationType
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import com.ideabridge.app.engine.BackupJson
+import com.ideabridge.app.engine.IdeaDoc
+import com.ideabridge.app.engine.LinkEngine
+import com.ideabridge.app.engine.LinkSuggestion
+import com.ideabridge.app.engine.pairKey
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** غلاف يميّز "لم يُحمَّل بعد" (null) عن "حُمِّل ولا توجد قيمة" (Loaded(null)). */
 data class Loaded<T>(val value: T?)
@@ -58,6 +69,51 @@ class IdeasViewModel(app: Application) : AndroidViewModel(app) {
     fun idea(id: Long): Flow<Loaded<IdeaEntity>> = repo.observeIdea(id).map { Loaded(it) }
     fun relations(ideaId: Long): Flow<List<RelationRow>> =
         if (ideaId == 0L) emptyFlow() else repo.observeRelations(ideaId)
+
+    private val engine = LinkEngine()
+
+    /** اقتراحات مرفوضة في هذه الجلسة فقط (تعود بعد إعادة تشغيل التطبيق). */
+    private val rejected = MutableStateFlow<Set<String>>(emptySet())
+
+    fun galaxyRelations(galaxyId: Long): Flow<List<RelationEntity>> = repo.observeRelationsInGalaxy(galaxyId)
+
+    /** يحسب الاقتراحات خارج الخيط الرئيسي كلما تغيرت الملاحظات أو الروابط أو المرفوضات. */
+    fun linkSuggestions(galaxyId: Long): Flow<List<LinkSuggestion>> =
+        combine(repo.observeIdeasInGalaxy(galaxyId, ""), repo.observeRelationsInGalaxy(galaxyId), rejected) { notes, rels, rej ->
+            val docs = notes.map { IdeaDoc(it.id, it.title, it.description) }
+            val existing = rels.map { pairKey(it.firstIdeaId, it.secondIdeaId) }.toSet()
+            engine.suggest(docs, existing, rej)
+        }.flowOn(Dispatchers.Default)
+
+    fun rejectSuggestion(key: String) { rejected.update { it + key } }
+
+    /** قبول الاقتراح = إنشاء رابط "تشابه" عادي بآلية الروابط اليدوية نفسها (لا تكرار). */
+    fun acceptSuggestion(s: LinkSuggestion, onResult: (SaveResult<Long>) -> Unit) {
+        viewModelScope.launch { onResult(repo.addRelation(s.firstId, s.secondId, RelationType.SIMILARITY)) }
+    }
+
+    /** يكتب نسخة JSON احتياطية في الملف الذي اختاره المستخدم. */
+    fun exportBackup(uri: android.net.Uri, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val ok = try {
+                when (val snap = repo.loadSnapshot()) {
+                    is SaveResult.Failure -> false
+                    is SaveResult.Success -> withContext(Dispatchers.IO) {
+                        val json = BackupJson.toJson(snap.value.galaxies, snap.value.notes, snap.value.relations, System.currentTimeMillis())
+                        val out = getApplication<Application>().contentResolver.openOutputStream(uri, "wt")
+                            ?: return@withContext false
+                        out.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+                        true
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                false
+            }
+            onDone(ok)
+        }
+    }
 
     fun createGalaxy(name: String, colorIndex: Int, onResult: (SaveResult<Long>) -> Unit) {
         viewModelScope.launch { onResult(repo.createGalaxy(name, colorIndex)) }

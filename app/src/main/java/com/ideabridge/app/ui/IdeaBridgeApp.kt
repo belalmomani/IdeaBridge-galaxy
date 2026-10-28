@@ -32,7 +32,7 @@ private enum class Tab(val route: String, val labelRes: Int, val icon: ImageVect
     Home("home", R.string.nav_galaxies, Icons.Filled.Home, true),
     Notes("notes", R.string.nav_notes, Icons.Filled.Create, true),
     Links("links", R.string.nav_links, Icons.Filled.Share, false),
-    Settings("settings", R.string.nav_settings, Icons.Filled.Settings, false),
+    Settings("settings", R.string.nav_settings, Icons.Filled.Settings, true),
 }
 
 /** أدوات تنقل بسيطة؛ المسارات نصوص مثل "galaxy/5" و"note/5/0" وتُحفظ عبر تدوير الشاشة. */
@@ -68,7 +68,7 @@ fun IdeaBridgeApp(vm: IdeasViewModel = viewModel()) {
         BackHandler(enabled = stack.size > 1) { nav.pop() }
 
         val msgSoon = stringResource(R.string.msg_coming_soon)
-        val isTopLevel = route == "home" || route == "notes"
+        val isTopLevel = route == "home" || route == "notes" || route == "settings"
 
         Scaffold(
             modifier = Modifier.fillMaxSize().imePadding(),
@@ -96,6 +96,7 @@ fun IdeaBridgeApp(vm: IdeasViewModel = viewModel()) {
                 when (parts[0]) {
                     "home" -> GalaxiesRoute(vm, nav)
                     "notes" -> NotesRoute(vm, nav)
+                    "settings" -> SettingsRoute(vm, nav)
                     "galaxy" -> GalaxyRoute(a, vm, nav)
                     "note" -> NoteRoute(galaxyId = a, noteId = b, vm = vm, nav = nav)
                     "relate" -> RelateRoute(a, vm, nav)
@@ -172,10 +173,16 @@ private fun GalaxyRoute(id: Long, vm: IdeasViewModel, nav: Nav) {
     val context = LocalContext.current
     var query by rememberSaveable { mutableStateOf("") }
     val state by remember(id) { vm.galaxy(id) }.collectAsStateWithLifecycle(initialValue = null)
-    val notes by remember(id, query) { vm.notesIn(id, query) }.collectAsStateWithLifecycle(initialValue = null)
+    val allNotes by remember(id) { vm.notesIn(id, "") }.collectAsStateWithLifecycle(initialValue = emptyList())
+    val listNotes by remember(id, query) { vm.notesIn(id, query) }.collectAsStateWithLifecycle(initialValue = null)
+    val relations by remember(id) { vm.galaxyRelations(id) }.collectAsStateWithLifecycle(initialValue = emptyList())
+    val suggestions by remember(id) { vm.linkSuggestions(id) }.collectAsStateWithLifecycle(initialValue = emptyList())
     GalaxyScreen(
         state = state,
-        notes = notes,
+        allNotes = allNotes,
+        listNotes = listNotes,
+        relations = relations,
+        suggestions = suggestions,
         query = query,
         onQueryChange = { query = it },
         onBack = nav.pop,
@@ -187,7 +194,21 @@ private fun GalaxyRoute(id: Long, vm: IdeasViewModel, nav: Nav) {
         onDelete = {
             vm.deleteGalaxy(id) { r -> handleResult(r, context, nav, R.string.msg_galaxy_deleted) { nav.pop() } }
         },
+        onAcceptSuggestion = { s ->
+            vm.acceptSuggestion(s) { r -> handleResult(r, context, nav, R.string.msg_relation_added) }
+        },
+        onRejectSuggestion = vm::rejectSuggestion,
     )
+}
+
+@Composable
+private fun SettingsRoute(vm: IdeasViewModel, nav: Nav) {
+    val context = LocalContext.current
+    SettingsScreen(onExport = { uri ->
+        vm.exportBackup(uri) { ok ->
+            nav.say(context.getString(if (ok) R.string.backup_done else R.string.backup_failed))
+        }
+    })
 }
 
 @Composable
