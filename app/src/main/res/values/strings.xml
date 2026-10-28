@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">جسر الأفكار</string>
+    <string name="app_tagline">ملاحظاتك على شكل مجرّة</string>
+
+    <!-- عام -->
+    <string name="back">رجوع</string>
+    <string name="save">حفظ</string>
+    <string name="create">إنشاء</string>
+    <string name="cancel">إلغاء</string>
+    <string name="delete">حذف</string>
+    <string name="rename">إعادة تسمية</string>
+    <string name="loading">جارٍ التحميل…</string>
+    <string name="msg_coming_soon">هذه الميزة ستتوفر في مرحلة لاحقة</string>
+    <string name="ad_slot_placeholder">مساحة محجوزة للتصميم — ليست إعلانًا</string>
+
+    <!-- التنقل -->
+    <string name="nav_galaxies">المجرات</string>
+    <string name="nav_notes">الملاحظات</string>
+    <string name="nav_links">الروابط</string>
+    <string name="nav_settings">الإعدادات</string>
+
+    <!-- المجرات -->
+    <string name="new_galaxy">مجرة جديدة</string>
+    <string name="galaxy_note_count">%1$d ملاحظة</string>
+    <string name="galaxies_empty_title">لا توجد مجرات</string>
+    <string name="galaxies_empty_body">أنشئ مجرتك الأولى، أو اضغط «ملاحظة جديدة» وستُنشأ مجرة «ملاحظاتي» تلقائيًا.</string>
+    <string name="galaxy_create_title">مجرة جديدة</string>
+    <string name="galaxy_rename_title">تعديل المجرة</string>
+    <string name="galaxy_name_label">اسم المجرة</string>
+    <string name="galaxy_not_found">هذه المجرة غير موجودة أو حُذفت</string>
+    <string name="galaxy_empty_title">المجرة فارغة</string>
+    <string name="galaxy_empty_body">اضغط «ملاحظة جديدة» لإضافة أول ملاحظة فيها.</string>
+    <string name="delete_galaxy_title">حذف المجرة؟</string>
+    <string name="delete_galaxy_message">سيتم حذف «%1$s» وكل ملاحظاتها وروابطها نهائيًا.</string>
+    <string name="msg_galaxy_created">تم إنشاء المجرة</string>
+    <string name="msg_galaxy_renamed">تم حفظ التعديل</string>
+    <string name="msg_galaxy_deleted">تم حذف المجرة وملاحظاتها</string>
+
+    <!-- الملاحظات -->
+    <string name="new_note">ملاحظة جديدة</string>
+    <string name="search_hint">ابحث في الملاحظات</string>
+    <string name="clear_search">مسح البحث</string>
+    <string name="search_no_results">لا توجد نتائج مطابقة لبحثك</string>
+    <string name="notes_empty_title">لا توجد ملاحظات بعد</string>
+    <string name="notes_empty_body">اضغط «ملاحظة جديدة» وابدأ الكتابة، وتُحفظ ملاحظاتك تلقائيًا على جهازك.</string>
+    <string name="note_screen_title">ملاحظة</string>
+    <string name="note_title_hint">العنوان</string>
+    <string name="note_body_hint">اكتب ملاحظتك هنا…</string>
+    <string name="note_not_found">هذه الملاحظة غير موجودة أو حُذفت</string>
+    <string name="status_saving">جارٍ الحفظ…</string>
+    <string name="status_saved">تم الحفظ</string>
+    <string name="status_failed">تعذر الحفظ</string>
+    <string name="delete_note_title">حذف الملاحظة؟</string>
+    <string name="delete_note_message">ستُحذف الملاحظة وروابطها نهائيًا.</string>
+    <string name="msg_idea_deleted">تم حذف الملاحظة وروابطها</string>
+
+    <!-- الروابط بين الملاحظات -->
+    <string name="relations_title">الروابط</string>
+    <string name="relations_empty">لا توجد روابط لهذه الملاحظة بعد.</string>
+    <string name="link_to_note">ربط بملاحظة أخرى</string>
+    <string name="delete_relation_desc">حذف الرابط</string>
+    <string name="delete_relation_title">حذف الرابط؟</string>
+    <string name="relate_title">ربط ملاحظتين</string>
+    <string name="relate_first">الملاحظة الأولى</string>
+    <string name="relate_second">الملاحظة الثانية</string>
+    <string name="relate_type">نوع الرابط</string>
+    <string name="relate_preview">المعاينة:</string>
+    <string name="relate_save">حفظ الرابط</string>
+    <string name="relate_need_two">تحتاج إلى ملاحظتين على الأقل لإنشاء رابط. أضف ملاحظة أخرى أولًا.</string>
+    <string name="choose_idea">اختر ملاحظة</string>
+    <string name="type_similarity">تشابه</string>
+    <string name="type_cause">سبب</string>
+    <string name="type_effect">نتيجة</string>
+    <string name="type_dependency">اعتماد</string>
+    <string name="type_merge">دمج</string>
+    <string name="sentence_similarity">«%1$s» تشبه «%2$s»</string>
+    <string name="sentence_cause">«%1$s» سبب في «%2$s»</string>
+    <string name="sentence_effect">«%1$s» نتيجة عن «%2$s»</string>
+    <string name="sentence_dependency">«%1$s» تعتمد على «%2$s»</string>
+    <string name="sentence_merge">«%1$s» تُدمج مع «%2$s»</string>
+    <string name="msg_relation_added">تم إنشاء الرابط</string>
+    <string name="msg_relation_deleted">تم حذف الرابط</string>
+
+    <!-- الأخطاء -->
+    <string name="err_empty_title">الملاحظة فارغة، اكتب عنوانًا أو نصًا</string>
+    <string name="err_title_too_long">العنوان طويل جدًا (الحد الأقصى 140 حرفًا)</string>
+    <string name="err_description_too_long">النص طويل جدًا (الحد الأقصى 20000 حرف)</string>
+    <string name="err_same_idea">لا يمكن ربط الملاحظة بنفسها</string>
+    <string name="err_idea_not_found">الملاحظة غير موجودة، ربما حُذفت</string>
+    <string name="err_relation_not_found">الرابط غير موجود، ربما حُذف</string>
+    <string name="err_duplicate_relation">هذا الرابط موجود مسبقًا بالنوع والاتجاه نفسيهما</string>
+    <string name="err_empty_galaxy_name">اكتب اسم المجرة أولًا</string>
+    <string name="err_galaxy_name_too_long">اسم المجرة طويل جدًا (الحد الأقصى 40 حرفًا)</string>
+    <string name="err_galaxy_not_found">المجرة غير موجودة، ربما حُذفت</string>
+    <string name="err_unknown">تعذر إتمام العملية ولم يُحفظ شيء. حاول مرة أخرى</string>
+</resources>
