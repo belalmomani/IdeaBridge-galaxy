@@ -10,11 +10,16 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.ideabridge.app.IdeaRules
 import com.ideabridge.app.R
 import com.ideabridge.app.data.GalaxyRow
 import com.ideabridge.app.data.IdeaEntity
@@ -139,8 +144,8 @@ fun GalaxyEditDialog(
     onConfirm: (name: String, colorIndex: Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var name by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(initialName) }
-    var color by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(initialColor) }
+    var name by rememberSaveable { mutableStateOf(initialName) }
+    var color by rememberSaveable { mutableStateOf(initialColor) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -148,7 +153,7 @@ fun GalaxyEditDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it.take(com.ideabridge.app.IdeaRules.MAX_GALAXY_NAME) },
+                    onValueChange = { name = it.take(IdeaRules.MAX_GALAXY_NAME) },
                     singleLine = true,
                     label = { Text(stringResource(R.string.galaxy_name_label)) },
                     modifier = Modifier.fillMaxWidth(),
