@@ -14,10 +14,13 @@ import androidx.compose.ui.unit.dp
 import com.ideabridge.app.R
 
 @Composable
-fun SettingsScreen(onExport: (Uri) -> Unit) {
-    // CreateDocument لا يحتاج أي إذن؛ المستخدم يختار مكان الملف بنفسه
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+fun SettingsScreen(onExport: (Uri) -> Unit, onImport: (Uri) -> Unit) {
+    // CreateDocument وOpenDocument لا يحتاجان أي إذن؛ المستخدم يختار الملف بنفسه
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) onExport(uri)
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) onImport(uri)
     }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -28,9 +31,17 @@ fun SettingsScreen(onExport: (Uri) -> Unit) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.backup_title), style = MaterialTheme.typography.titleMedium)
                 Text(stringResource(R.string.backup_body), style = MaterialTheme.typography.bodyMedium)
-                Button(onClick = { launcher.launch("ideabridge-backup.json") }, modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { exportLauncher.launch("ideabridge-backup.json") }, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.backup_button))
                 }
+                OutlinedButton(onClick = { importLauncher.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.import_button))
+                }
+                Text(
+                    stringResource(R.string.import_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         Card(Modifier.fillMaxWidth()) {

@@ -23,6 +23,7 @@ interface IdeaDao {
     @Query(
         "SELECT * FROM ideas WHERE title LIKE '%' || :pattern || '%' ESCAPE '\\' " +
             "OR IFNULL(description, '') LIKE '%' || :pattern || '%' ESCAPE '\\' " +
+            "OR galaxyId IN (SELECT id FROM galaxies WHERE name LIKE '%' || :pattern || '%' ESCAPE '\\') " +
             "ORDER BY updatedAt DESC, id DESC"
     )
     fun observe(pattern: String): Flow<List<IdeaEntity>>
@@ -55,6 +56,9 @@ interface IdeaDao {
             "WHERE r.firstIdeaId = :ideaId OR r.secondIdeaId = :ideaId ORDER BY r.createdAt DESC, r.id DESC"
     )
     fun observeRelationsOf(ideaId: Long): Flow<List<RelationRow>>
+
+    @Query("UPDATE ideas SET galaxyId = :galaxyId WHERE id = :id")
+    suspend fun moveIdea(id: Long, galaxyId: Long): Int
 
     // ---------- المجرات ----------
     @Insert(onConflict = OnConflictStrategy.ABORT)
@@ -106,4 +110,21 @@ interface IdeaDao {
             "AND secondIdeaId IN (SELECT id FROM ideas WHERE galaxyId = :galaxyId) ORDER BY id"
     )
     fun observeRelationsInGalaxy(galaxyId: Long): Flow<List<RelationEntity>>
+
+    // ---------- اقتراحات مرفوضة وتبويب الروابط ----------
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRejected(rejected: RejectedLinkEntity)
+
+    @Query("SELECT pairKey FROM rejected_links")
+    fun observeRejectedKeys(): Flow<List<String>>
+
+    @Query(
+        "SELECT r.id AS id, r.firstIdeaId AS firstIdeaId, r.secondIdeaId AS secondIdeaId, r.type AS type, " +
+            "a.title AS firstTitle, b.title AS secondTitle, " +
+            "IFNULL(ga.name, '') AS firstGalaxy, IFNULL(gb.name, '') AS secondGalaxy " +
+            "FROM relations r JOIN ideas a ON a.id = r.firstIdeaId JOIN ideas b ON b.id = r.secondIdeaId " +
+            "LEFT JOIN galaxies ga ON ga.id = a.galaxyId LEFT JOIN galaxies gb ON gb.id = b.galaxyId " +
+            "ORDER BY r.createdAt DESC, r.id DESC"
+    )
+    fun observeAllLinkRows(): Flow<List<LinkRow>>
 }

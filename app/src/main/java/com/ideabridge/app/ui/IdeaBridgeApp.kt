@@ -27,12 +27,13 @@ import com.ideabridge.app.IdeasViewModel
 import com.ideabridge.app.IdeaRules
 import com.ideabridge.app.R
 import com.ideabridge.app.SaveResult
+import com.ideabridge.app.data.ImportOutcome
 import kotlinx.coroutines.launch
 
 private enum class Tab(val route: String, val labelRes: Int, val icon: ImageVector, val implemented: Boolean) {
     Home("home", R.string.nav_galaxies, Icons.Filled.Home, true),
     Notes("notes", R.string.nav_notes, Icons.Filled.Create, true),
-    Links("links", R.string.nav_links, Icons.Filled.Share, false),
+    Links("links", R.string.nav_links, Icons.Filled.Share, true),
     Settings("settings", R.string.nav_settings, Icons.Filled.Settings, true),
 }
 
@@ -69,7 +70,7 @@ fun IdeaBridgeApp(vm: IdeasViewModel = viewModel()) {
         BackHandler(enabled = stack.size > 1) { nav.pop() }
 
         val msgSoon = stringResource(R.string.msg_coming_soon)
-        val isTopLevel = route == "home" || route == "notes" || route == "settings"
+        val isTopLevel = route == "home" || route == "notes" || route == "links" || route == "settings"
 
         Scaffold(
             modifier = Modifier.fillMaxSize().imePadding(),
@@ -97,6 +98,7 @@ fun IdeaBridgeApp(vm: IdeasViewModel = viewModel()) {
                 when (parts[0]) {
                     "home" -> GalaxiesRoute(vm, nav)
                     "notes" -> NotesRoute(vm, nav)
+                    "links" -> LinksRoute(vm, nav)
                     "settings" -> SettingsRoute(vm, nav)
                     "galaxy" -> GalaxyRoute(a, vm, nav)
                     "note" -> NoteRoute(galaxyId = a, noteId = b, vm = vm, nav = nav)
@@ -125,12 +127,14 @@ private fun <T> handleResult(
 private fun GalaxiesRoute(vm: IdeasViewModel, nav: Nav) {
     val context = LocalContext.current
     val galaxies by vm.galaxies.collectAsStateWithLifecycle()
+    val galaxyLinks by vm.galaxyLinks.collectAsStateWithLifecycle()
     val results by vm.ideas.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
     var showCreate by rememberSaveable { mutableStateOf(false) }
 
     GalaxiesScreen(
         galaxies = galaxies,
+        galaxyLinks = galaxyLinks,
         query = query,
         onQueryChange = vm::setQuery,
         results = results,
@@ -203,13 +207,43 @@ private fun GalaxyRoute(id: Long, vm: IdeasViewModel, nav: Nav) {
 }
 
 @Composable
+private fun LinksRoute(vm: IdeasViewModel, nav: Nav) {
+    val context = LocalContext.current
+    val links by vm.allLinks.collectAsStateWithLifecycle()
+    LinksScreen(
+        links = links,
+        onOpenNote = { nav.push("note/0/$it") },
+        onDeleteLink = { id ->
+            vm.deleteRelation(id) { r -> handleResult(r, context, nav, R.string.msg_relation_deleted) }
+        },
+    )
+}
+
+@Composable
 private fun SettingsRoute(vm: IdeasViewModel, nav: Nav) {
     val context = LocalContext.current
-    SettingsScreen(onExport = { uri ->
-        vm.exportBackup(uri) { ok ->
-            nav.say(context.getString(if (ok) R.string.backup_done else R.string.backup_failed))
-        }
-    })
+    SettingsScreen(
+        onExport = { uri ->
+            vm.exportBackup(uri) { ok ->
+                nav.say(context.getString(if (ok) R.string.backup_done else R.string.backup_failed))
+            }
+        },
+        onImport = { uri ->
+            vm.importBackup(uri) { outcome ->
+                nav.say(
+                    when (outcome) {
+                        is ImportOutcome.Done -> context.getString(
+                            R.string.import_done,
+                            outcome.report.notesAdded, outcome.report.galaxiesAdded,
+                            outcome.report.relationsAdded, outcome.report.notesSkipped,
+                        )
+                        ImportOutcome.Invalid -> context.getString(R.string.import_invalid)
+                        ImportOutcome.Failed -> context.getString(R.string.import_failed)
+                    }
+                )
+            }
+        },
+    )
 }
 
 @Composable
@@ -256,6 +290,10 @@ private fun EditorHost(galaxyId: Long, noteId: Long, title: String, body: String
             vm.deleteRelation(relationId) { r -> handleResult(r, context, nav, R.string.msg_relation_deleted) }
         },
         onError = { nav.say(context.getString(it.messageRes())) },
+        suggestGalaxy = vm::suggestGalaxy,
+        onMove = { id, galaxyId ->
+            vm.moveNote(id, galaxyId) { r -> handleResult(r, context, nav, R.string.msg_note_moved) }
+        },
     )
 }
 

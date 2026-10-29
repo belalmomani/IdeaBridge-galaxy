@@ -118,4 +118,28 @@
     <string name="backup_failed">تعذر حفظ النسخة الاحتياطية</string>
     <string name="privacy_title">الخصوصية</string>
     <string name="privacy_body">لا يتصل التطبيق بالإنترنت ولا يطلب أي إذن. التحليل الذي يقترح الروابط يجري على جهازك فقط.</string>
+
+    <!-- التصنيف = المجرة: اقتراح، بحث، وروابط بين المجرات -->
+    <string name="galaxy_name_hint">اسم المجرة هو تصنيفها، مثل «طبخ» أو «حاسوب»</string>
+    <string name="search_hint_global">ابحث في المجرات والملاحظات</string>
+    <string name="search_galaxies_title">المجرات</string>
+    <string name="search_notes_title">الملاحظات</string>
+    <string name="mode_map">خريطة</string>
+    <string name="galaxy_links_title">مجرات متقاربة نصيًا (من مقارنة أسمائها وملاحظاتها)</string>
+    <string name="galaxy_link_reason">«%1$s» و«%2$s» — تتشاركان: %3$s (تشابه %4$d من 100)</string>
+    <string name="move_banner">تبدو هذه الملاحظة أقرب إلى مجرة «%1$s» (%2$s)</string>
+    <string name="move_action">نقلها إلى «%1$s»</string>
+    <string name="move_ignore">تجاهل</string>
+    <string name="msg_note_moved">تم نقل الملاحظة</string>
+
+    <!-- الروابط والاستيراد -->
+    <string name="links_title">كل الروابط</string>
+    <string name="links_empty_title">لا توجد روابط بعد</string>
+    <string name="links_empty_body">اربط ملاحظتين من أسفل المحرر، أو اقبل اقتراحًا من داخل مجرة، وستظهر هنا.</string>
+    <string name="link_cross_galaxy">بين مجرتين: «%1$s» ← «%2$s»</string>
+    <string name="import_button">استيراد نسخة احتياطية</string>
+    <string name="import_note">الاستيراد يضيف محتوى الملف إلى ما لديك ولا يحذف ولا يستبدل شيئًا، ويتخطى ما هو موجود مسبقًا.</string>
+    <string name="import_done">تم الاستيراد: %1$d ملاحظة جديدة، %2$d مجرة جديدة، %3$d رابط (تم تخطي %4$d ملاحظة موجودة)</string>
+    <string name="import_invalid">الملف ليس نسخة احتياطية صالحة من جسر الأفكار</string>
+    <string name="import_failed">تعذر الاستيراد ولم يتغير شيء</string>
 </resources>

@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ideabridge.app.GalaxyMove
 import com.ideabridge.app.IdeaError
 import com.ideabridge.app.IdeaRules
 import com.ideabridge.app.R
@@ -46,6 +47,8 @@ fun NoteEditorScreen(
     onOpenNote: (Long) -> Unit,
     onDeleteRelation: (Long) -> Unit,
     onError: (IdeaError) -> Unit,
+    suggestGalaxy: suspend (noteId: Long) -> GalaxyMove?,
+    onMove: (noteId: Long, galaxyId: Long) -> Unit,
 ) {
     var title by rememberSaveable { mutableStateOf(initialTitle) }
     var body by rememberSaveable { mutableStateOf(initialBody) }
@@ -55,6 +58,8 @@ fun NoteEditorScreen(
     var dirty by remember { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     var relationToDelete by rememberSaveable { mutableStateOf<Long?>(null) }
+    var move by remember { mutableStateOf<GalaxyMove?>(null) }
+    val dismissedGalaxies = remember { mutableSetOf<Long>() }
     val scope = rememberCoroutineScope()
 
     // يحفظ آخر نص؛ وإن وصل تعديل أثناء الحفظ يعيد المحاولة بعد انتهائه (لا نسخ مكررة).
@@ -73,6 +78,16 @@ fun NoteEditorScreen(
                     is SaveResult.Failure -> { status = SaveStatus.Failed; onError(result.error); break }
                 }
             } while (dirty)
+            // اقتراح مجرة أنسب: يظهر بعد الحفظ فقط، ولا يُنقل شيء دون موافقة المستخدم
+            if (status == SaveStatus.Saved && noteId != 0L) {
+                move = try {
+                    suggestGalaxy(noteId)?.takeIf { it.galaxyId !in dismissedGalaxies }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+            }
         } catch (e: CancellationException) {
             throw e
         } finally {
@@ -121,6 +136,31 @@ fun NoteEditorScreen(
             modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            val suggestion = move
+            if (suggestion != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    ),
+                ) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            stringResource(R.string.move_banner, suggestion.galaxyName, suggestion.words.joinToString("، ") { "«$it»" }),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { move = null; onMove(noteId, suggestion.galaxyId) }) {
+                                Text(stringResource(R.string.move_action, suggestion.galaxyName))
+                            }
+                            TextButton(onClick = { dismissedGalaxies.add(suggestion.galaxyId); move = null }) {
+                                Text(stringResource(R.string.move_ignore))
+                            }
+                        }
+                    }
+                }
+            }
             TextField(
                 value = title,
                 onValueChange = { title = it.take(IdeaRules.MAX_LENGTH) },

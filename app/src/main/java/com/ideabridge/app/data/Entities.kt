@@ -85,3 +85,22 @@ data class RelationRow(
     @ColumnInfo(name = "firstTitle") val firstTitle: String,
     @ColumnInfo(name = "secondTitle") val secondTitle: String,
 )
+
+/** اقتراح رابط رفضه المستخدم؛ يُحفظ حتى لا يعود الاقتراح نفسه بعد إعادة تشغيل التطبيق. */
+@Entity(tableName = "rejected_links")
+data class RejectedLinkEntity(
+    @PrimaryKey val pairKey: String,
+    val rejectedAt: Long,
+)
+
+/** صف عرض لتبويب الروابط: رابط مع عنوانَي طرفيه واسمَي مجرتيهما. */
+data class LinkRow(
+    val id: Long,
+    val firstIdeaId: Long,
+    val secondIdeaId: Long,
+    val type: RelationType,
+    val firstTitle: String,
+    val secondTitle: String,
+    val firstGalaxy: String,
+    val secondGalaxy: String,
+)

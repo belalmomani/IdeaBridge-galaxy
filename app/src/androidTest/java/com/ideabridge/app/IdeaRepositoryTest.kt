@@ -7,6 +7,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ideabridge.app.data.IdeaBridgeDatabase
 import com.ideabridge.app.data.IdeaRepository
 import com.ideabridge.app.data.RelationType
+import com.ideabridge.app.engine.BackupJson
+import com.ideabridge.app.engine.BackupParser
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -235,6 +237,150 @@ class SnapshotAndGraphQueryTest {
         repo.addRelation(a, c, RelationType.CAUSE)   // بين مجرتين: لا يظهر في رسم أي منهما
         assertEquals(1, repo.observeRelationsInGalaxy(g1).first().size)
         assertEquals(0, repo.observeRelationsInGalaxy(g2).first().size)
+    }
+}
+
+@RunWith(AndroidJUnit4::class)
+class CategoryBehaviourTest {
+    private lateinit var db: IdeaBridgeDatabase
+    private lateinit var repo: IdeaRepository
+
+    @Before fun setUp() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        db = Room.inMemoryDatabaseBuilder(context, IdeaBridgeDatabase::class.java).build()
+        repo = IdeaRepository(db)
+    }
+
+    @After fun tearDown() { db.close() }
+
+    private fun id(r: SaveResult<Long>): Long = (r as SaveResult.Success).value
+
+    @Test fun searchingAGalaxyNameReturnsEverythingInsideIt() = runBlocking {
+        val cooking = id(repo.createGalaxy("طبخ", 1))
+        val computer = id(repo.createGalaxy("حاسوب", 2))
+        id(repo.addIdea("كبسة", "أرز ولحم", cooking))
+        id(repo.addIdea("منسف", null, cooking))
+        id(repo.addIdea("تثبيت ويندوز", null, computer))
+        // الكلمة «طبخ» ليست في نص أي ملاحظة، لكن المجرة تحمل هذا الاسم
+        assertEquals(setOf("كبسة", "منسف"), repo.observeIdeas("طبخ").first().map { it.title }.toSet())
+        assertEquals(listOf("تثبيت ويندوز"), repo.observeIdeas("حاسوب").first().map { it.title })
+    }
+
+    @Test fun movingANoteKeepsItsTextDatesAndLinks() = runBlocking {
+        val a = id(repo.createGalaxy("أ", 0))
+        val b = id(repo.createGalaxy("ب", 1))
+        val n1 = id(repo.addIdea("ملاحظة", "نص", a))
+        val n2 = id(repo.addIdea("أخرى", null, a))
+        repo.addRelation(n1, n2, RelationType.SIMILARITY)
+        val before = db.dao().getById(n1)!!
+        assertTrue(repo.moveIdea(n1, b) is SaveResult.Success)
+        val after = db.dao().getById(n1)!!
+        assertEquals(b, after.galaxyId)
+        assertEquals(before.title, after.title)
+        assertEquals(before.description, after.description)
+        assertEquals(before.updatedAt, after.updatedAt)
+        assertEquals(1, db.dao().getAllRelations().size)
+    }
+
+    @Test fun movingToAMissingGalaxyOrOfAMissingNoteFails() = runBlocking {
+        val g = id(repo.createGalaxy("أ", 0))
+        val n = id(repo.addIdea("x", null, g))
+        assertEquals(IdeaError.GalaxyNotFound, (repo.moveIdea(n, 999) as SaveResult.Failure).error)
+        assertEquals(IdeaError.IdeaNotFound, (repo.moveIdea(999, g) as SaveResult.Failure).error)
+        assertEquals(g, db.dao().getById(n)!!.galaxyId)
+    }
+}
+
+@RunWith(AndroidJUnit4::class)
+class ImportAndRejectionTest {
+    private lateinit var context: Context
+    private lateinit var db: IdeaBridgeDatabase
+    private lateinit var repo: IdeaRepository
+
+    @Before fun setUp() {
+        context = ApplicationProvider.getApplicationContext()
+        db = Room.inMemoryDatabaseBuilder(context, IdeaBridgeDatabase::class.java).build()
+        repo = IdeaRepository(db)
+    }
+
+    @After fun tearDown() { db.close() }
+
+    private fun id(r: SaveResult<Long>): Long = (r as SaveResult.Success).value
+
+    private suspend fun exportedBackup() = run {
+        val g = id(repo.createGalaxy("طبخ", 1))
+        val n1 = id(repo.addIdea("كبسة", "أرز", g))
+        val n2 = id(repo.addIdea("منسف", null, g))
+        repo.addRelation(n1, n2, RelationType.CAUSE)
+        val snap = (repo.loadSnapshot() as SaveResult.Success).value
+        (BackupParser.parse(BackupJson.toJson(snap.galaxies, snap.notes, snap.relations, 1L)) as BackupParser.Result.Ok).backup
+    }
+
+    @Test fun importIntoAnEmptyDatabaseRestoresEverything() = runBlocking {
+        val backup = exportedBackup()
+        val db2 = Room.inMemoryDatabaseBuilder(context, IdeaBridgeDatabase::class.java).build()
+        try {
+            val report = (IdeaRepository(db2).importBackup(backup) as SaveResult.Success).value
+            assertEquals(1, report.galaxiesAdded)
+            assertEquals(2, report.notesAdded)
+            assertEquals(0, report.notesSkipped)
+            assertEquals(1, report.relationsAdded)
+            assertEquals(2, db2.dao().getAllIdeas().size)
+            assertEquals(1, db2.dao().getAllRelations().size)
+        } finally {
+            db2.close()
+        }
+    }
+
+    @Test fun importingTheSameFileTwiceDoesNotDuplicateAnything() = runBlocking {
+        val backup = exportedBackup() // البيانات الأصلية موجودة أصلًا في هذه القاعدة
+        val report = (repo.importBackup(backup) as SaveResult.Success).value
+        assertEquals(0, report.galaxiesAdded)
+        assertEquals(0, report.notesAdded)
+        assertEquals(2, report.notesSkipped)
+        assertEquals(0, report.relationsAdded)
+        assertEquals(2, db.dao().getAllIdeas().size)
+        assertEquals(1, db.dao().getAllRelations().size)
+        assertEquals(1, db.dao().getAllGalaxies().size)
+    }
+
+    @Test fun importNeverTouchesExistingNotes() = runBlocking {
+        val backup = exportedBackup()
+        val mine = id(repo.addIdea("ملاحظتي الخاصة", "لا تُمس"))
+        val before = db.dao().getById(mine)!!
+        repo.importBackup(backup)
+        assertEquals(before, db.dao().getById(mine))
+    }
+
+    @Test fun rejectedSuggestionsArePersistedAndSurviveReopening() = runBlocking {
+        val name = "rejected-test.db"
+        context.deleteDatabase(name)
+        fun open() = Room.databaseBuilder(context, IdeaBridgeDatabase::class.java, name).build()
+        val first = open()
+        try {
+            IdeaRepository(first).rejectLink("1-2")
+            IdeaRepository(first).rejectLink("1-2") // التكرار آمن
+        } finally {
+            first.close()
+        }
+        val second = open()
+        try {
+            assertEquals(setOf("1-2"), IdeaRepository(second).observeRejected().first())
+        } finally {
+            second.close()
+            context.deleteDatabase(name)
+        }
+    }
+
+    @Test fun allLinkRowsIncludeLinksBetweenTwoGalaxies() = runBlocking {
+        val a = id(repo.createGalaxy("أ", 0))
+        val b = id(repo.createGalaxy("ب", 1))
+        val n1 = id(repo.addIdea("في أ", null, a))
+        val n2 = id(repo.addIdea("في ب", null, b))
+        repo.addRelation(n1, n2, RelationType.SIMILARITY)
+        val row = repo.observeAllLinks().first().single()
+        assertEquals("أ", row.firstGalaxy)
+        assertEquals("ب", row.secondGalaxy)
     }
 }
 

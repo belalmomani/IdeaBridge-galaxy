@@ -9,8 +9,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [GalaxyEntity::class, IdeaEntity::class, RelationEntity::class],
-    version = 2,
+    entities = [GalaxyEntity::class, IdeaEntity::class, RelationEntity::class, RejectedLinkEntity::class],
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -39,12 +39,22 @@ abstract class IdeaBridgeDatabase : RoomDatabase() {
             }
         }
 
+        /** 2 → 3: جدول الاقتراحات المرفوضة. لا يمس أي جدول موجود. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `rejected_links` (`pairKey` TEXT NOT NULL, " +
+                        "`rejectedAt` INTEGER NOT NULL, PRIMARY KEY(`pairKey`))"
+                )
+            }
+        }
+
         // لا نستخدم fallbackToDestructiveMigration عمدًا حتى لا تُحذف بيانات المستخدم بصمت.
         fun get(context: Context): IdeaBridgeDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext, IdeaBridgeDatabase::class.java, FILE_NAME
-                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
             }
     }
 }

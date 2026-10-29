@@ -9,9 +9,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ideabridge.app.R
+import com.ideabridge.app.data.GalaxyRow
 import com.ideabridge.app.data.IdeaEntity
 import com.ideabridge.app.data.RelationEntity
 import com.ideabridge.app.engine.GalaxyLayout
@@ -41,61 +42,58 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.min
 
+/** عقدة في الرسم (كوكب ملاحظة أو مجرة). radius بوحدة نسبية تُضرب في الكثافة والتكبير. */
+data class GraphNode(
+    val id: Long,
+    val label: String,
+    val radius: Float,
+    val glow: Boolean,
+    val color: Color,
+)
+
 /**
- * عرض الكواكب: كل ملاحظة كوكب متوهج، والروابط المحفوظة خطوط ثابتة، والاقتراحات خطوط متقطعة خافتة.
- * سحب بإصبع للتحريك، وقرص بإصبعين للتكبير، ولمسة على كوكب لفتح ملاحظته.
+ * رسم عام للكواكب والخطوط: سحب بإصبع للتحريك، وقرص للتكبير، ولمسة على عقدة لفتحها.
+ * solidEdges خطوط ثابتة (روابط محفوظة)، وdashedEdges خطوط متقطعة (اقتراحات نصية).
  */
 @Composable
-fun GalaxyGraph(
-    notes: List<IdeaEntity>,
-    relations: List<RelationEntity>,
-    suggestions: List<LinkSuggestion>,
-    showSuggestions: Boolean,
-    color: Color,
-    onOpenNote: (Long) -> Unit,
+fun PlanetGraph(
+    nodes: List<GraphNode>,
+    solidEdges: List<Pair<Long, Long>>,
+    dashedEdges: List<Pair<Long, Long>>,
+    layoutEdges: List<Pair<Long, Long>>,
+    dashedColor: Color,
+    emptyText: String,
+    onOpen: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (notes.isEmpty()) {
+    if (nodes.isEmpty()) {
         Box(modifier.padding(24.dp), contentAlignment = Alignment.Center) {
-            Text(stringResource(R.string.graph_empty), style = MaterialTheme.typography.bodyLarge)
+            Text(emptyText, style = MaterialTheme.typography.bodyLarge)
         }
         return
     }
 
     val density = LocalDensity.current.density
     val textMeasurer = rememberTextMeasurer()
-    val now = remember { System.currentTimeMillis() }
-    val ids = remember(notes) { notes.map { it.id } }
-    val edges = remember(relations) { relations.map { it.firstIdeaId to it.secondIdeaId } }
-    val degree = remember(relations) {
-        val map = HashMap<Long, Int>()
-        relations.forEach {
-            map[it.firstIdeaId] = (map[it.firstIdeaId] ?: 0) + 1
-            map[it.secondIdeaId] = (map[it.secondIdeaId] ?: 0) + 1
-        }
-        map
-    }
+    val ids = remember(nodes) { nodes.map { it.id } }
 
-    // التخطيط يُحسب خارج الخيط الرئيسي حتى لا تتجمد الواجهة مع كثرة الملاحظات
-    val layout by produceState<Map<Long, GalaxyLayout.Point>>(emptyMap(), ids, edges) {
+    // التخطيط يُحسب خارج الخيط الرئيسي حتى لا تتجمد الواجهة مع كثرة العقد
+    val layout by produceState<Map<Long, GalaxyLayout.Point>>(emptyMap(), ids, layoutEdges) {
         value = withContext(Dispatchers.Default) {
-            GalaxyLayout.compute(ids, edges, iterations = if (ids.size > 400) 60 else 150)
+            GalaxyLayout.compute(ids, layoutEdges, iterations = if (ids.size > 400) 60 else 150)
         }
     }
 
-    var scale by rememberSaveable { mutableFloatStateOf(1f) }
-    var panX by rememberSaveable { mutableFloatStateOf(0f) }
-    var panY by rememberSaveable { mutableFloatStateOf(0f) }
+    var scale by rememberSaveable { mutableStateOf(1f) }
+    var panX by rememberSaveable { mutableStateOf(0f) }
+    var panY by rememberSaveable { mutableStateOf(0f) }
 
     fun project(p: GalaxyLayout.Point, w: Float, h: Float): Offset {
         val r = min(w, h) / 2f * 0.8f
         return Offset(w / 2f + panX + p.x * r * scale, h / 2f + panY + p.y * r * scale)
     }
 
-    fun radiusPx(n: IdeaEntity): Float {
-        val len = n.title.length + (n.description?.length ?: 0)
-        return GalaxyLayout.planetRadius(len, degree[n.id] ?: 0) * density * scale.coerceIn(0.7f, 1.6f)
-    }
+    fun radiusPx(n: GraphNode): Float = n.radius * density * scale.coerceIn(0.7f, 1.6f)
 
     Box(
         modifier
@@ -107,13 +105,13 @@ fun GalaxyGraph(
                     panY += pan.y
                 }
             }
-            .pointerInput(notes, layout) {
+            .pointerInput(nodes, layout) {
                 detectTapGestures { tap ->
                     val w = size.width.toFloat()
                     val h = size.height.toFloat()
                     var bestId: Long? = null
                     var bestDistance = Float.MAX_VALUE
-                    for (n in notes) {
+                    for (n in nodes) {
                         val p = layout[n.id] ?: continue
                         val d = (project(p, w, h) - tap).getDistance()
                         if (d <= radiusPx(n) + 24f * density && d < bestDistance) {
@@ -121,7 +119,7 @@ fun GalaxyGraph(
                             bestDistance = d
                         }
                     }
-                    bestId?.let(onOpenNote)
+                    bestId?.let(onOpen)
                 }
             }
     ) {
@@ -129,48 +127,45 @@ fun GalaxyGraph(
         Canvas(Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
-            if (showSuggestions) {
-                for (s in suggestions) {
-                    val a = layout[s.firstId] ?: continue
-                    val b = layout[s.secondId] ?: continue
-                    drawLine(
-                        color = color.copy(alpha = 0.45f),
-                        start = project(a, w, h), end = project(b, w, h),
-                        strokeWidth = 2f * density,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f * density, 10f * density)),
-                    )
-                }
+            for ((a, b) in dashedEdges) {
+                val pa = layout[a] ?: continue
+                val pb = layout[b] ?: continue
+                drawLine(
+                    color = dashedColor.copy(alpha = 0.55f),
+                    start = project(pa, w, h), end = project(pb, w, h),
+                    strokeWidth = 2f * density,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f * density, 10f * density)),
+                )
             }
-            for (r in relations) {
-                val a = layout[r.firstIdeaId] ?: continue
-                val b = layout[r.secondIdeaId] ?: continue
+            for ((a, b) in solidEdges) {
+                val pa = layout[a] ?: continue
+                val pb = layout[b] ?: continue
                 drawLine(
                     color = Color.White.copy(alpha = 0.6f),
-                    start = project(a, w, h), end = project(b, w, h),
+                    start = project(pa, w, h), end = project(pb, w, h),
                     strokeWidth = 2f * density,
                 )
             }
-            val showLabels = notes.size <= 120 || scale >= 1.5f
-            for (n in notes) {
+            val showLabels = nodes.size <= 120 || scale >= 1.5f
+            for (n in nodes) {
                 val p = layout[n.id] ?: continue
                 val c = project(p, w, h)
                 val r = radiusPx(n)
-                val recent = now - n.updatedAt < 86_400_000L // الملاحظة الحديثة تتوهج أكثر
-                val haloRadius = r * (if (recent) 3.2f else 2.4f)
+                val haloRadius = r * (if (n.glow) 3.2f else 2.4f)
                 drawCircle(
                     brush = Brush.radialGradient(
-                        listOf(color.copy(alpha = if (recent) 0.55f else 0.30f), Color.Transparent),
+                        listOf(n.color.copy(alpha = if (n.glow) 0.55f else 0.30f), Color.Transparent),
                         center = c, radius = haloRadius,
                     ),
                     radius = haloRadius, center = c,
                 )
                 drawCircle(
-                    brush = Brush.radialGradient(listOf(Color.White, color), center = c, radius = r),
+                    brush = Brush.radialGradient(listOf(Color.White, n.color), center = c, radius = r),
                     radius = r, center = c,
                 )
                 if (showLabels) {
                     val label = textMeasurer.measure(
-                        text = n.title,
+                        text = n.label,
                         style = labelStyle,
                         overflow = TextOverflow.Ellipsis,
                         maxLines = 1,
@@ -187,4 +182,64 @@ fun GalaxyGraph(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+/** كواكب ملاحظات مجرة: الروابط المحفوظة ثابتة، والاقتراحات متقطعة، والملاحظة المعدّلة خلال 24 ساعة تتوهج. */
+@Composable
+fun GalaxyGraph(
+    notes: List<IdeaEntity>,
+    relations: List<RelationEntity>,
+    suggestions: List<LinkSuggestion>,
+    showSuggestions: Boolean,
+    color: Color,
+    onOpenNote: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val now = remember { System.currentTimeMillis() }
+    val solid = remember(relations) { relations.map { it.firstIdeaId to it.secondIdeaId } }
+    val nodes = remember(notes, relations, color) {
+        val degree = HashMap<Long, Int>()
+        relations.forEach {
+            degree[it.firstIdeaId] = (degree[it.firstIdeaId] ?: 0) + 1
+            degree[it.secondIdeaId] = (degree[it.secondIdeaId] ?: 0) + 1
+        }
+        notes.map {
+            val len = it.title.length + (it.description?.length ?: 0)
+            GraphNode(it.id, it.title, GalaxyLayout.planetRadius(len, degree[it.id] ?: 0), now - it.updatedAt < 86_400_000L, color)
+        }
+    }
+    val dashed = remember(suggestions, showSuggestions) {
+        if (showSuggestions) suggestions.map { it.firstId to it.secondId } else emptyList()
+    }
+    PlanetGraph(
+        nodes = nodes, solidEdges = solid, dashedEdges = dashed, layoutEdges = solid,
+        dashedColor = color, emptyText = stringResource(R.string.graph_empty),
+        onOpen = onOpenNote, modifier = modifier,
+    )
+}
+
+/** خريطة المجرات: كل مجرة كوكب بلونها، والخطوط المتقطعة روابط نصية بين المجرات المتقاربة. */
+@Composable
+fun GalaxyMapGraph(
+    galaxies: List<GalaxyRow>,
+    links: List<LinkSuggestion>,
+    onOpenGalaxy: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val edges = remember(links) { links.map { it.firstId to it.secondId } }
+    val nodes = remember(galaxies, links) {
+        val degree = HashMap<Long, Int>()
+        links.forEach {
+            degree[it.firstId] = (degree[it.firstId] ?: 0) + 1
+            degree[it.secondId] = (degree[it.secondId] ?: 0) + 1
+        }
+        galaxies.map {
+            GraphNode(it.id, it.name, GalaxyLayout.planetRadius(it.noteCount * 150, degree[it.id] ?: 0), false, galaxyColor(it.colorIndex))
+        }
+    }
+    PlanetGraph(
+        nodes = nodes, solidEdges = emptyList(), dashedEdges = edges, layoutEdges = edges,
+        dashedColor = MaterialTheme.colorScheme.primary, emptyText = stringResource(R.string.galaxies_empty_title),
+        onOpen = onOpenGalaxy, modifier = modifier,
+    )
 }
