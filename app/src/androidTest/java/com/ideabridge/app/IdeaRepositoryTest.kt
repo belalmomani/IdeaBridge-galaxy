@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.ideabridge.app.data.DeletedSnapshot
 import com.ideabridge.app.data.IdeaBridgeDatabase
 import com.ideabridge.app.data.IdeaRepository
 import com.ideabridge.app.data.RelationType
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -381,6 +383,115 @@ class ImportAndRejectionTest {
         val row = repo.observeAllLinks().first().single()
         assertEquals("أ", row.firstGalaxy)
         assertEquals("ب", row.secondGalaxy)
+    }
+}
+
+@RunWith(AndroidJUnit4::class)
+class UndoDeleteTest {
+    private lateinit var db: IdeaBridgeDatabase
+    private lateinit var repo: IdeaRepository
+
+    @Before fun setUp() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        db = Room.inMemoryDatabaseBuilder(context, IdeaBridgeDatabase::class.java).build()
+        repo = IdeaRepository(db)
+    }
+
+    @After fun tearDown() { db.close() }
+
+    private fun id(r: SaveResult<Long>): Long = (r as SaveResult.Success).value
+    private fun snap(r: SaveResult<DeletedSnapshot>): DeletedSnapshot = (r as SaveResult.Success).value
+
+    @Test fun undoingANoteDeletionRestoresSameIdTextAndLinks() = runBlocking {
+        val g = id(repo.createGalaxy("أ", 0))
+        val n1 = id(repo.addIdea("ملاحظة", "نص", g))
+        val n2 = id(repo.addIdea("أخرى", null, g))
+        repo.addRelation(n1, n2, RelationType.CAUSE)
+        val noteBefore = db.dao().getById(n1)!!
+        val relationsBefore = db.dao().getAllRelations()
+
+        val captured = snap(repo.captureNote(n1))
+        assertTrue(repo.deleteIdea(n1) is SaveResult.Success)
+        assertNull(db.dao().getById(n1))
+        assertTrue(db.dao().getAllRelations().isEmpty())
+
+        assertTrue(repo.restore(captured) is SaveResult.Success)
+        assertEquals(noteBefore, db.dao().getById(n1))
+        assertEquals(relationsBefore, db.dao().getAllRelations())
+    }
+
+    @Test fun undoingAGalaxyDeletionRestoresEverythingInsideIt() = runBlocking {
+        val a = id(repo.createGalaxy("أ", 2))
+        val b = id(repo.createGalaxy("ب", 3))
+        val n1 = id(repo.addIdea("1", "نص", a))
+        val n2 = id(repo.addIdea("2", null, a))
+        val keep = id(repo.addIdea("3", null, b))
+        repo.addRelation(n1, n2, RelationType.SIMILARITY)
+        repo.addRelation(n1, keep, RelationType.DEPENDENCY)
+        val ideasBefore = db.dao().getAllIdeas()
+        val relationsBefore = db.dao().getAllRelations()
+        val galaxiesBefore = db.dao().getAllGalaxies()
+
+        val captured = snap(repo.captureGalaxy(a))
+        assertTrue(repo.deleteGalaxy(a) is SaveResult.Success)
+        assertEquals(1, db.dao().getAllIdeas().size)
+
+        assertTrue(repo.restore(captured) is SaveResult.Success)
+        assertEquals(galaxiesBefore, db.dao().getAllGalaxies())
+        assertEquals(ideasBefore, db.dao().getAllIdeas())
+        assertEquals(relationsBefore, db.dao().getAllRelations())
+    }
+
+    @Test fun undoingARelationDeletionBringsItBack() = runBlocking {
+        val g = id(repo.createGalaxy("أ", 0))
+        val n1 = id(repo.addIdea("1", null, g))
+        val n2 = id(repo.addIdea("2", null, g))
+        val rel = id(repo.addRelation(n1, n2, RelationType.MERGE))
+        val before = db.dao().getAllRelations()
+        val captured = snap(repo.captureRelation(rel))
+        repo.deleteRelation(rel)
+        assertTrue(db.dao().getAllRelations().isEmpty())
+        repo.restore(captured)
+        assertEquals(before, db.dao().getAllRelations())
+    }
+
+    @Test fun restoreSkipsALinkWhoseOtherEndNoLongerExists() = runBlocking {
+        val g = id(repo.createGalaxy("أ", 0))
+        val n1 = id(repo.addIdea("1", null, g))
+        val n2 = id(repo.addIdea("2", null, g))
+        repo.addRelation(n1, n2, RelationType.CAUSE)
+        val captured = snap(repo.captureNote(n1))
+        repo.deleteIdea(n1)
+        repo.deleteIdea(n2) // حُذف الطرف الآخر بعد ذلك
+        assertTrue(repo.restore(captured) is SaveResult.Success)
+        assertNotNull(db.dao().getById(n1))
+        assertTrue(db.dao().getAllRelations().isEmpty())
+    }
+
+    @Test fun restoreMovesANoteToAnExistingGalaxyWhenItsGalaxyIsGone() = runBlocking {
+        val gone = id(repo.createGalaxy("ستُحذف", 0))
+        val other = id(repo.createGalaxy("باقية", 1))
+        val n = id(repo.addIdea("ملاحظة", null, gone))
+        val captured = snap(repo.captureNote(n))
+        repo.deleteIdea(n)
+        repo.deleteGalaxy(gone)
+        assertTrue(repo.restore(captured) is SaveResult.Success)
+        assertEquals(other, db.dao().getById(n)!!.galaxyId)
+    }
+
+    @Test fun restoreNeverOverwritesWhatExistsNow() = runBlocking {
+        val g = id(repo.createGalaxy("أ", 0))
+        val n = id(repo.addIdea("قديم", "نص", g))
+        val captured = snap(repo.captureNote(n))
+        repo.updateIdea(n, "معدّل", "نص جديد")
+        repo.restore(captured)
+        assertEquals("معدّل", db.dao().getById(n)!!.title)
+    }
+
+    @Test fun capturingSomethingMissingFailsAndDeletesNothing() = runBlocking {
+        assertEquals(IdeaError.IdeaNotFound, (repo.captureNote(999) as SaveResult.Failure).error)
+        assertEquals(IdeaError.GalaxyNotFound, (repo.captureGalaxy(999) as SaveResult.Failure).error)
+        assertEquals(IdeaError.RelationNotFound, (repo.captureRelation(999) as SaveResult.Failure).error)
     }
 }
 

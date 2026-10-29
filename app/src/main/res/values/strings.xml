@@ -142,4 +142,8 @@
     <string name="import_done">تم الاستيراد: %1$d ملاحظة جديدة، %2$d مجرة جديدة، %3$d رابط (تم تخطي %4$d ملاحظة موجودة)</string>
     <string name="import_invalid">الملف ليس نسخة احتياطية صالحة من جسر الأفكار</string>
     <string name="import_failed">تعذر الاستيراد ولم يتغير شيء</string>
+
+    <!-- التراجع عن الحذف -->
+    <string name="undo">تراجع</string>
+    <string name="msg_restored">تمت الاستعادة</string>
 </resources>

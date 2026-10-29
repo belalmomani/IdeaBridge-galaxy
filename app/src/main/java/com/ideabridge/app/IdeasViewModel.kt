@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ideabridge.app.data.GalaxyEntity
+import com.ideabridge.app.data.DeletedSnapshot
 import com.ideabridge.app.data.GalaxyRow
 import com.ideabridge.app.data.ImportOutcome
 import com.ideabridge.app.data.LinkRow
@@ -209,8 +210,9 @@ class IdeasViewModel(app: Application) : AndroidViewModel(app) {
     fun updateGalaxy(id: Long, name: String, colorIndex: Int, onResult: (SaveResult<Unit>) -> Unit) {
         viewModelScope.launch { onResult(repo.updateGalaxy(id, name, colorIndex)) }
     }
-    fun deleteGalaxy(id: Long, onResult: (SaveResult<Unit>) -> Unit) {
-        viewModelScope.launch { onResult(repo.deleteGalaxy(id)) }
+    /** يحذف المجرة مع التقاط ما حُذف ليمكن التراجع. */
+    fun deleteGalaxy(id: Long, onResult: (SaveResult<DeletedSnapshot>) -> Unit) {
+        viewModelScope.launch { onResult(captureThenDelete(repo.captureGalaxy(id)) { repo.deleteGalaxy(id) }) }
     }
 
     /** حفظ تلقائي من المحرر: ينشئ الملاحظة إن كان noteId = 0 وإلا يحدّثها، ويعيد معرفها. */
@@ -224,13 +226,30 @@ class IdeasViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
 
-    fun deleteIdea(id: Long, onResult: (SaveResult<Unit>) -> Unit) {
-        viewModelScope.launch { onResult(repo.deleteIdea(id)) }
+    fun deleteIdea(id: Long, onResult: (SaveResult<DeletedSnapshot>) -> Unit) {
+        viewModelScope.launch { onResult(captureThenDelete(repo.captureNote(id)) { repo.deleteIdea(id) }) }
     }
     fun addRelation(first: Long, second: Long, type: RelationType, onResult: (SaveResult<Long>) -> Unit) {
         viewModelScope.launch { onResult(repo.addRelation(first, second, type)) }
     }
-    fun deleteRelation(id: Long, onResult: (SaveResult<Unit>) -> Unit) {
-        viewModelScope.launch { onResult(repo.deleteRelation(id)) }
+    fun deleteRelation(id: Long, onResult: (SaveResult<DeletedSnapshot>) -> Unit) {
+        viewModelScope.launch { onResult(captureThenDelete(repo.captureRelation(id)) { repo.deleteRelation(id) }) }
+    }
+
+    fun restore(snapshot: DeletedSnapshot, onResult: (SaveResult<Unit>) -> Unit) {
+        viewModelScope.launch { onResult(repo.restore(snapshot)) }
+    }
+
+    /** لا يُحذف شيء إلا بعد نجاح التقاطه، ولا يُعاد نجاح إلا إذا نجح الحذف فعلًا. */
+    private suspend fun captureThenDelete(
+        captured: SaveResult<DeletedSnapshot>,
+        delete: suspend () -> SaveResult<Unit>,
+    ): SaveResult<DeletedSnapshot> {
+        if (captured is SaveResult.Failure) return captured
+        val snapshot = (captured as SaveResult.Success).value
+        return when (val deleted = delete()) {
+            is SaveResult.Success -> SaveResult.Success(snapshot)
+            is SaveResult.Failure -> deleted
+        }
     }
 }

@@ -25,3 +25,10 @@ sealed interface ImportOutcome {
     data object Invalid : ImportOutcome
     data object Failed : ImportOutcome
 }
+
+/** ما حُذف فعليًا (مجرة و/أو ملاحظات و/أو روابط) محفوظًا في الذاكرة لإمكان التراجع عنه. */
+data class DeletedSnapshot(
+    val galaxy: GalaxyEntity?,
+    val notes: List<IdeaEntity>,
+    val relations: List<RelationEntity>,
+)

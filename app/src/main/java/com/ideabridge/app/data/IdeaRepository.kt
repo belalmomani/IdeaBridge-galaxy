@@ -51,6 +51,44 @@ class IdeaRepository(
         db.withTransaction { Snapshot(dao.getAllGalaxies(), dao.getAllIdeas(), dao.getAllRelations()) }
     }
 
+    // ---------- التقاط واستعادة (التراجع عن الحذف) ----------
+    suspend fun captureNote(id: Long): SaveResult<DeletedSnapshot> = safely {
+        db.withTransaction {
+            val note = dao.getById(id) ?: throw IdeaException(IdeaError.IdeaNotFound)
+            DeletedSnapshot(null, listOf(note), dao.getRelationsOfIdea(id))
+        }
+    }
+
+    suspend fun captureGalaxy(id: Long): SaveResult<DeletedSnapshot> = safely {
+        db.withTransaction {
+            val galaxy = dao.getGalaxy(id) ?: throw IdeaException(IdeaError.GalaxyNotFound)
+            DeletedSnapshot(galaxy, dao.getIdeasOfGalaxy(id), dao.getRelationsOfGalaxy(id))
+        }
+    }
+
+    suspend fun captureRelation(id: Long): SaveResult<DeletedSnapshot> = safely {
+        val relation = dao.getRelation(id) ?: throw IdeaException(IdeaError.RelationNotFound)
+        DeletedSnapshot(null, emptyList(), listOf(relation))
+    }
+
+    /**
+     * يعيد ما حُذف بمعرفاته الأصلية. لا يستبدل شيئًا موجودًا (IGNORE). ملاحظة مجرتها لم تعد موجودة تذهب إلى
+     * المجرة الافتراضية، ورابط أحد طرفيه غير موجود لا يُعاد.
+     */
+    suspend fun restore(snapshot: DeletedSnapshot): SaveResult<Unit> = safely {
+        db.withTransaction {
+            snapshot.galaxy?.let { dao.restoreGalaxy(it) }
+            val notes = snapshot.notes.map { n ->
+                if (dao.getGalaxy(n.galaxyId) == null) n.copy(galaxyId = ensureDefaultGalaxyInternal()) else n
+            }
+            dao.restoreIdeas(notes)
+            val relations = snapshot.relations.filter {
+                dao.getById(it.firstIdeaId) != null && dao.getById(it.secondIdeaId) != null
+            }
+            dao.restoreRelations(relations)
+        }
+    }
+
     // ---------- اقتراحات مرفوضة وروابط ----------
     fun observeRejected(): Flow<Set<String>> = dao.observeRejectedKeys().map { it.toSet() }
     fun observeAllLinks(): Flow<List<LinkRow>> = dao.observeAllLinkRows()

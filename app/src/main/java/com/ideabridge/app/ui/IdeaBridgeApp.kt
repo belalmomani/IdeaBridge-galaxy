@@ -27,6 +27,7 @@ import com.ideabridge.app.IdeasViewModel
 import com.ideabridge.app.IdeaRules
 import com.ideabridge.app.R
 import com.ideabridge.app.SaveResult
+import com.ideabridge.app.data.DeletedSnapshot
 import com.ideabridge.app.data.ImportOutcome
 import kotlinx.coroutines.launch
 
@@ -43,6 +44,7 @@ private class Nav(
     val pop: () -> Unit,
     val top: (String) -> Unit,
     val say: (String) -> Unit,
+    val sayUndo: (String, () -> Unit) -> Unit,
 )
 
 @Composable
@@ -54,6 +56,7 @@ fun IdeaBridgeApp(vm: IdeasViewModel = viewModel()) {
         var stack by rememberSaveable { mutableStateOf(arrayListOf("home")) }
         val route = stack.last()
 
+        val undoLabel = stringResource(R.string.undo)
         val nav = remember {
             Nav(
                 push = { r -> stack = ArrayList(stack + r) },
@@ -63,6 +66,15 @@ fun IdeaBridgeApp(vm: IdeasViewModel = viewModel()) {
                     scope.launch {
                         snackbar.currentSnackbarData?.dismiss()
                         snackbar.showSnackbar(msg)
+                    }
+                },
+                sayUndo = { msg, onUndo ->
+                    scope.launch {
+                        snackbar.currentSnackbarData?.dismiss()
+                        val result = snackbar.showSnackbar(
+                            message = msg, actionLabel = undoLabel, duration = SnackbarDuration.Long,
+                        )
+                        if (result == SnackbarResult.ActionPerformed) onUndo()
                     }
                 },
             )
@@ -119,6 +131,26 @@ private fun <T> handleResult(
 ) {
     when (result) {
         is SaveResult.Success -> { nav.say(context.getString(successMessage)); onSuccess() }
+        is SaveResult.Failure -> nav.say(context.getString(result.error.messageRes()))
+    }
+}
+
+/** بعد حذف ناجح: رسالة مع زر «تراجع» يعيد المحذوف بمعرفاته، ثم onSuccess. */
+private fun handleDeleted(
+    result: SaveResult<DeletedSnapshot>,
+    vm: IdeasViewModel,
+    context: android.content.Context,
+    nav: Nav,
+    successMessage: Int,
+    onSuccess: () -> Unit = {},
+) {
+    when (result) {
+        is SaveResult.Success -> {
+            nav.sayUndo(context.getString(successMessage)) {
+                vm.restore(result.value) { r -> handleResult(r, context, nav, R.string.msg_restored) }
+            }
+            onSuccess()
+        }
         is SaveResult.Failure -> nav.say(context.getString(result.error.messageRes()))
     }
 }
@@ -197,7 +229,7 @@ private fun GalaxyRoute(id: Long, vm: IdeasViewModel, nav: Nav) {
             vm.updateGalaxy(id, name, color) { r -> handleResult(r, context, nav, R.string.msg_galaxy_renamed) }
         },
         onDelete = {
-            vm.deleteGalaxy(id) { r -> handleResult(r, context, nav, R.string.msg_galaxy_deleted) { nav.pop() } }
+            vm.deleteGalaxy(id) { r -> handleDeleted(r, vm, context, nav, R.string.msg_galaxy_deleted) { nav.pop() } }
         },
         onAcceptSuggestion = { s ->
             vm.acceptSuggestion(s) { r -> handleResult(r, context, nav, R.string.msg_relation_added) }
@@ -214,7 +246,7 @@ private fun LinksRoute(vm: IdeasViewModel, nav: Nav) {
         links = links,
         onOpenNote = { nav.push("note/0/$it") },
         onDeleteLink = { id ->
-            vm.deleteRelation(id) { r -> handleResult(r, context, nav, R.string.msg_relation_deleted) }
+            vm.deleteRelation(id) { r -> handleDeleted(r, vm, context, nav, R.string.msg_relation_deleted) }
         },
     )
 }
@@ -282,12 +314,12 @@ private fun EditorHost(galaxyId: Long, noteId: Long, title: String, body: String
         save = { id, t, b -> vm.saveNote(id, galaxyId, t, b) },
         onBack = nav.pop,
         onDeleteNote = { id ->
-            vm.deleteIdea(id) { r -> handleResult(r, context, nav, R.string.msg_idea_deleted) { nav.pop() } }
+            vm.deleteIdea(id) { r -> handleDeleted(r, vm, context, nav, R.string.msg_idea_deleted) { nav.pop() } }
         },
         onLink = { id -> nav.push("relate/$id") },
         onOpenNote = { nav.push("note/0/$it") },
         onDeleteRelation = { relationId ->
-            vm.deleteRelation(relationId) { r -> handleResult(r, context, nav, R.string.msg_relation_deleted) }
+            vm.deleteRelation(relationId) { r -> handleDeleted(r, vm, context, nav, R.string.msg_relation_deleted) }
         },
         onError = { nav.say(context.getString(it.messageRes())) },
         suggestGalaxy = vm::suggestGalaxy,

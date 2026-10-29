@@ -127,4 +127,29 @@ interface IdeaDao {
             "ORDER BY r.createdAt DESC, r.id DESC"
     )
     fun observeAllLinkRows(): Flow<List<LinkRow>>
+
+    // ---------- التقاط واستعادة ما يُحذف (للتراجع) ----------
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun restoreGalaxy(galaxy: GalaxyEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun restoreIdeas(ideas: List<IdeaEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun restoreRelations(relations: List<RelationEntity>)
+
+    @Query("SELECT * FROM ideas WHERE galaxyId = :galaxyId ORDER BY id")
+    suspend fun getIdeasOfGalaxy(galaxyId: Long): List<IdeaEntity>
+
+    @Query("SELECT * FROM relations WHERE firstIdeaId = :ideaId OR secondIdeaId = :ideaId ORDER BY id")
+    suspend fun getRelationsOfIdea(ideaId: Long): List<RelationEntity>
+
+    @Query("SELECT * FROM relations WHERE id = :id")
+    suspend fun getRelation(id: Long): RelationEntity?
+
+    @Query(
+        "SELECT * FROM relations WHERE firstIdeaId IN (SELECT id FROM ideas WHERE galaxyId = :galaxyId) " +
+            "OR secondIdeaId IN (SELECT id FROM ideas WHERE galaxyId = :galaxyId) ORDER BY id"
+    )
+    suspend fun getRelationsOfGalaxy(galaxyId: Long): List<RelationEntity>
 }
