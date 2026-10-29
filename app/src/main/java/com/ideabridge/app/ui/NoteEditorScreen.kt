@@ -13,6 +13,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ideabridge.app.GalaxyMove
@@ -20,6 +22,7 @@ import com.ideabridge.app.IdeaError
 import com.ideabridge.app.IdeaRules
 import com.ideabridge.app.R
 import com.ideabridge.app.SaveResult
+import com.ideabridge.app.engine.ListEditing
 import com.ideabridge.app.data.RelationRow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -51,7 +54,8 @@ fun NoteEditorScreen(
     onMove: (noteId: Long, galaxyId: Long) -> Unit,
 ) {
     var title by rememberSaveable { mutableStateOf(initialTitle) }
-    var body by rememberSaveable { mutableStateOf(initialBody) }
+    var bodyField by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(initialBody)) }
+    val body = bodyField.text
     var noteId by rememberSaveable { mutableStateOf(initialNoteId) }
     var status by remember { mutableStateOf(SaveStatus.Idle) }
     var saving by remember { mutableStateOf(false) }
@@ -70,9 +74,10 @@ fun NoteEditorScreen(
         try {
             do {
                 dirty = false
-                val effective = IdeaRules.effectiveTitle(title, body)
+                val currentBody = bodyField.text // يُقرأ من الحالة مباشرة حتى لا تُحفظ نسخة قديمة عند إعادة المحاولة
+                val effective = IdeaRules.effectiveTitle(title, currentBody)
                 if (effective.isEmpty()) { status = SaveStatus.Idle; break }
-                val result = withContext(NonCancellable) { save(noteId, effective, body) }
+                val result = withContext(NonCancellable) { save(noteId, effective, currentBody) }
                 when (result) {
                     is SaveResult.Success -> { noteId = result.value; status = SaveStatus.Saved }
                     is SaveResult.Failure -> { status = SaveStatus.Failed; onError(result.error); break }
@@ -171,8 +176,25 @@ fun NoteEditorScreen(
                 colors = plain,
             )
             TextField(
-                value = body,
-                onValueChange = { body = it.take(IdeaRules.MAX_DESCRIPTION) },
+                value = bodyField,
+                onValueChange = { typed ->
+                    val limited = if (typed.text.length > IdeaRules.MAX_DESCRIPTION) {
+                        typed.copy(text = typed.text.take(IdeaRules.MAX_DESCRIPTION))
+                    } else {
+                        typed
+                    }
+                    // Enter داخل قائمة يبدأ عنصرًا جديدًا تلقائيًا
+                    val continued = if (limited.selection.collapsed) {
+                        ListEditing.continueList(bodyField.text, limited.text, limited.selection.end)
+                    } else {
+                        null
+                    }
+                    bodyField = if (continued != null) {
+                        TextFieldValue(continued.text, TextRange(continued.selStart, continued.selEnd))
+                    } else {
+                        limited
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 240.dp),
                 placeholder = { Text(stringResource(R.string.note_body_hint)) },
                 colors = plain,
@@ -210,6 +232,30 @@ fun NoteEditorScreen(
                     }
                 }
             }
+        }
+        // شريط أدوات القوائم فوق لوحة المفاتيح مباشرة
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            fun applyEdit(edit: ListEditing.Edit) {
+                val text = edit.text.take(IdeaRules.MAX_DESCRIPTION)
+                bodyField = TextFieldValue(
+                    text, TextRange(minOf(edit.selStart, text.length), minOf(edit.selEnd, text.length)),
+                )
+            }
+            AssistChip(
+                onClick = { applyEdit(ListEditing.toggleChecklist(bodyField.text, bodyField.selection.start, bodyField.selection.end)) },
+                label = { Text(stringResource(R.string.fmt_checklist)) },
+            )
+            AssistChip(
+                onClick = { applyEdit(ListEditing.toggleDone(bodyField.text, bodyField.selection.end)) },
+                label = { Text(stringResource(R.string.fmt_done)) },
+            )
+            AssistChip(
+                onClick = { applyEdit(ListEditing.toggleBullet(bodyField.text, bodyField.selection.start, bodyField.selection.end)) },
+                label = { Text(stringResource(R.string.fmt_bullet)) },
+            )
         }
     }
 

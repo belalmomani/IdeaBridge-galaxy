@@ -146,4 +146,9 @@
     <!-- التراجع عن الحذف -->
     <string name="undo">تراجع</string>
     <string name="msg_restored">تمت الاستعادة</string>
+
+    <!-- أدوات الكتابة -->
+    <string name="fmt_checklist">☐ قائمة مهام</string>
+    <string name="fmt_done">☑ إنجاز</string>
+    <string name="fmt_bullet">• نقاط</string>
 </resources>

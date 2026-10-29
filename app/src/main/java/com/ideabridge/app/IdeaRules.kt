@@ -1,5 +1,7 @@
 package com.ideabridge.app
 
+import com.ideabridge.app.engine.ListEditing
+
 /** أخطاء التحقق والحفظ بصيغة مستقلة عن الواجهة. */
 enum class IdeaError {
     EmptyTitle, TitleTooLong, DescriptionTooLong,
@@ -35,7 +37,10 @@ object IdeaRules {
     fun effectiveTitle(title: String, body: String): String {
         val t = cleanTitle(title)
         if (t.isNotEmpty()) return t.take(MAX_LENGTH)
-        val firstLine = body.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }.orEmpty()
+        val firstLine = body.lineSequence()
+            .map { ListEditing.stripMarker(it.trim()).trim() }
+            .firstOrNull { it.isNotEmpty() }
+            .orEmpty()
         return firstLine.take(MAX_LENGTH)
     }
 
