@@ -13,15 +13,30 @@ android {
         applicationId = "com.ideabridge.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0-phase1"
+        // رقم الإصدار يزيد مع كل تشغيل على GitHub ليقبله الهاتف تحديثًا فوق السابق
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionName = "0.5.0"
         resourceConfigurations += listOf("ar")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    // لا توجد إعدادات توقيع هنا عمدًا: الإصدار النهائي سيُوقَّع لاحقًا بمفتاحك السابق عبر GitHub Secrets.
+    // التوقيع يُقرأ من متغيرات بيئة يضعها سير عمل الإصدار من GitHub Secrets فقط.
+    // لا مفاتيح ولا كلمات مرور في المستودع، وبدون هذه المتغيرات يُبنى الإصدار غير موقّع كما كان.
+    val releaseKeystore = System.getenv("IDEABRIDGE_KEYSTORE_FILE")
+    if (releaseKeystore != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("IDEABRIDGE_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("IDEABRIDGE_KEY_ALIAS")
+                keyPassword = System.getenv("IDEABRIDGE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
