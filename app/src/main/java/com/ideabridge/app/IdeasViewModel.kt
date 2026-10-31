@@ -22,6 +22,7 @@ import com.ideabridge.app.engine.GalaxyMatcher
 import com.ideabridge.app.engine.IdeaDoc
 import com.ideabridge.app.engine.LinkEngine
 import com.ideabridge.app.engine.LinkSuggestion
+import com.ideabridge.app.engine.SuggestionType
 import com.ideabridge.app.engine.pairKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -111,6 +112,11 @@ class IdeasViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** يحفظ ملاحظة مدمجة اقترحها المحرك وقبلها المستخدم، داخل المجرة المحددة. */
+    fun saveMerged(galaxyId: Long, title: String, body: String, onResult: (SaveResult<Long>) -> Unit) {
+        viewModelScope.launch { onResult(repo.addIdea(title, body, galaxyId)) }
+    }
+
     fun moveNote(noteId: Long, galaxyId: Long, onResult: (SaveResult<Unit>) -> Unit) {
         viewModelScope.launch { onResult(repo.moveIdea(noteId, galaxyId)) }
     }
@@ -135,9 +141,14 @@ class IdeasViewModel(app: Application) : AndroidViewModel(app) {
         .map<List<LinkRow>, List<LinkRow>?> { it }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /** قبول الاقتراح = إنشاء رابط "تشابه" عادي بآلية الروابط اليدوية نفسها (لا تكرار). */
+    /** قبول الاقتراح = إنشاء رابط عادي بنوع مناسب وبآلية الروابط اليدوية نفسها (لا تكرار). */
     fun acceptSuggestion(s: LinkSuggestion, onResult: (SaveResult<Long>) -> Unit) {
-        viewModelScope.launch { onResult(repo.addRelation(s.firstId, s.secondId, RelationType.SIMILARITY)) }
+        val type = when (s.type) {
+            SuggestionType.SIMILARITY -> RelationType.SIMILARITY
+            SuggestionType.PROBLEM_SOLUTION -> RelationType.DEPENDENCY // firstId هو المشكلة
+            SuggestionType.CAUSE_EFFECT -> RelationType.CAUSE          // firstId هو السبب
+        }
+        viewModelScope.launch { onResult(repo.addRelation(s.firstId, s.secondId, type)) }
     }
 
     /** يكتب نسخة JSON احتياطية في الملف الذي اختاره المستخدم. */

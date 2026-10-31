@@ -2,6 +2,9 @@ package com.ideabridge.app.engine
 
 enum class LinkStrength { STRONG, MEDIUM, WEAK }
 
+/** نوع الاقتراح؛ السببية والمشكلة/الحل لا تُقترح إلا بإشارة صريحة في النص، وإلا فالنوع «تشابه». */
+enum class SuggestionType { SIMILARITY, PROBLEM_SOLUTION, CAUSE_EFFECT }
+
 /** اقتراح رابط بين ملاحظتين، مبني فقط على الكلمات المشتركة؛ ليس فهمًا للمعنى ولا نتيجة مؤكدة. */
 data class LinkSuggestion(
     val firstId: Long,
@@ -11,6 +14,10 @@ data class LinkSuggestion(
     val strength: LinkStrength,
     /** الكلمات المشتركة كما كُتبت في الملاحظة الأولى. */
     val sharedTerms: List<String>,
+    /** عند CAUSE_EFFECT: firstId هو السبب. وعند PROBLEM_SOLUTION: firstId هو المشكلة. */
+    val type: SuggestionType = SuggestionType.SIMILARITY,
+    /** الإشارات الصريحة التي استند إليها النوع (فارغة للتشابه). */
+    val cues: List<String> = emptyList(),
 ) {
     val key: String get() = pairKey(firstId, secondId)
 }
@@ -59,7 +66,12 @@ class LinkEngine(private val config: EngineConfig = EngineConfig()) {
                 val shared = sharedTerms(a, b)
                 if (score < config.similarityThreshold || shared.isEmpty()) continue
                 val strength = if (score >= config.strongScore) LinkStrength.STRONG else LinkStrength.MEDIUM
-                out.add(LinkSuggestion(a.doc.id, b.doc.id, score, strength, shared))
+                val refined = refine(a, b)
+                out.add(
+                    LinkSuggestion(
+                        refined.first.doc.id, refined.second.doc.id, score, strength, shared, refined.type, refined.cues,
+                    )
+                )
             }
         }
         return out
@@ -69,5 +81,32 @@ class LinkEngine(private val config: EngineConfig = EngineConfig()) {
                     .thenBy { maxOf(it.firstId, it.secondId) }
             )
             .take(config.maxSuggestions)
+    }
+
+    private class Refined(val type: SuggestionType, val first: Entry, val second: Entry, val cues: List<String>)
+
+    /** يحدد نوع الرابط من الإشارات الصريحة فقط، ويرتّب الطرفين (السبب أولًا، المشكلة أولًا). */
+    private fun refine(a: Entry, b: Entry): Refined {
+        val aCause = a.cueWords(Lexicon.CAUSE)
+        val aEffect = a.cueWords(Lexicon.EFFECT)
+        val bCause = b.cueWords(Lexicon.CAUSE)
+        val bEffect = b.cueWords(Lexicon.EFFECT)
+        when {
+            aCause.isNotEmpty() && aEffect.isEmpty() && bCause.isEmpty() -> return Refined(SuggestionType.CAUSE_EFFECT, a, b, aCause)
+            bCause.isNotEmpty() && bEffect.isEmpty() && aCause.isEmpty() -> return Refined(SuggestionType.CAUSE_EFFECT, b, a, bCause)
+            aEffect.isNotEmpty() && aCause.isEmpty() && bEffect.isEmpty() -> return Refined(SuggestionType.CAUSE_EFFECT, b, a, aEffect)
+            bEffect.isNotEmpty() && bCause.isEmpty() && aEffect.isEmpty() -> return Refined(SuggestionType.CAUSE_EFFECT, a, b, bEffect)
+        }
+        val aProblem = a.cueWords(Lexicon.PROBLEM)
+        val aSolution = a.cueWords(Lexicon.SOLUTION)
+        val bProblem = b.cueWords(Lexicon.PROBLEM)
+        val bSolution = b.cueWords(Lexicon.SOLUTION)
+        when {
+            aProblem.isNotEmpty() && aSolution.isEmpty() && bSolution.isNotEmpty() ->
+                return Refined(SuggestionType.PROBLEM_SOLUTION, a, b, aProblem + bSolution)
+            bProblem.isNotEmpty() && bSolution.isEmpty() && aSolution.isNotEmpty() ->
+                return Refined(SuggestionType.PROBLEM_SOLUTION, b, a, bProblem + aSolution)
+        }
+        return Refined(SuggestionType.SIMILARITY, a, b, emptyList())
     }
 }

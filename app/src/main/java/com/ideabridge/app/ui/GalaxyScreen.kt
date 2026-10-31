@@ -20,7 +20,11 @@ import com.ideabridge.app.data.GalaxyEntity
 import com.ideabridge.app.data.IdeaEntity
 import com.ideabridge.app.data.RelationEntity
 import com.ideabridge.app.engine.LinkStrength
+import com.ideabridge.app.engine.IdeaDoc
 import com.ideabridge.app.engine.LinkSuggestion
+import com.ideabridge.app.engine.MergeResult
+import com.ideabridge.app.engine.NoteMerger
+import com.ideabridge.app.engine.SuggestionType
 
 /** داخل المجرة: عرض الكواكب (الافتراضي) أو القائمة، مع اقتراحات الروابط وإجراءات المجرة. */
 @Composable
@@ -39,11 +43,13 @@ fun GalaxyScreen(
     onDelete: () -> Unit,
     onAcceptSuggestion: (LinkSuggestion) -> Unit,
     onRejectSuggestion: (String) -> Unit,
+    onSaveMerged: (title: String, body: String, done: (Boolean) -> Unit) -> Unit,
 ) {
     var showRename by rememberSaveable { mutableStateOf(false) }
     var showDelete by rememberSaveable { mutableStateOf(false) }
     var planetsMode by rememberSaveable { mutableStateOf(true) }
     var showSuggestions by rememberSaveable { mutableStateOf(true) }
+    var mergeFor by remember { mutableStateOf<LinkSuggestion?>(null) }
     val galaxy = state?.value
 
     SpaceBackground {
@@ -104,7 +110,7 @@ fun GalaxyScreen(
                             )
                         }
                         if (showSuggestions && suggestions.isNotEmpty()) {
-                            SuggestionPanel(suggestions, allNotes, onAcceptSuggestion, onRejectSuggestion)
+                            SuggestionPanel(suggestions, allNotes, onAcceptSuggestion, onRejectSuggestion) { mergeFor = it }
                         }
                     } else {
                         IdeasScreen(
@@ -142,6 +148,24 @@ fun GalaxyScreen(
             onDismiss = { showDelete = false },
         )
     }
+
+    val merging = mergeFor
+    if (merging != null) {
+        val result = remember(merging, allNotes) {
+            val byId = allNotes.associateBy { it.id }
+            val a = byId[merging.firstId]
+            val b = byId[merging.secondId]
+            if (a == null || b == null) {
+                MergeResult.NeedMore("إحدى الملاحظتين لم تعد موجودة.")
+            } else {
+                NoteMerger.propose(
+                    IdeaDoc(a.id, a.title, a.description), IdeaDoc(b.id, b.title, b.description),
+                    merging.type, merging.sharedTerms, merging.cues,
+                )
+            }
+        }
+        MergeDialog(result = result, onSave = onSaveMerged, onDismiss = { mergeFor = null })
+    }
 }
 
 @Composable
@@ -150,6 +174,7 @@ private fun SuggestionPanel(
     notes: List<IdeaEntity>,
     onAccept: (LinkSuggestion) -> Unit,
     onReject: (String) -> Unit,
+    onMerge: (LinkSuggestion) -> Unit,
 ) {
     val titles = remember(notes) { notes.associate { it.id to it.title } }
     Column(Modifier.fillMaxWidth().heightIn(max = 260.dp).padding(horizontal = 16.dp)) {
@@ -187,9 +212,18 @@ private fun SuggestionPanel(
                             ),
                             style = MaterialTheme.typography.bodySmall,
                         )
+                        val cuesText = s.cues.distinct().joinToString("، ") { "«$it»" }
+                        when (s.type) {
+                            SuggestionType.PROBLEM_SOLUTION ->
+                                Text(stringResource(R.string.suggestion_type_problem, cuesText), style = MaterialTheme.typography.labelMedium)
+                            SuggestionType.CAUSE_EFFECT ->
+                                Text(stringResource(R.string.suggestion_type_cause, cuesText), style = MaterialTheme.typography.labelMedium)
+                            SuggestionType.SIMILARITY -> Unit
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = { onAccept(s) }) { Text(stringResource(R.string.suggestion_accept)) }
                             OutlinedButton(onClick = { onReject(s.key) }) { Text(stringResource(R.string.suggestion_reject)) }
+                            TextButton(onClick = { onMerge(s) }) { Text(stringResource(R.string.merge_button)) }
                         }
                     }
                 }

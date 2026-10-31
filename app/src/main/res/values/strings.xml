@@ -151,4 +151,13 @@
     <string name="fmt_checklist">☐ قائمة مهام</string>
     <string name="fmt_done">☑ إنجاز</string>
     <string name="fmt_bullet">• نقاط</string>
+
+    <!-- أنواع الاقتراحات والدمج -->
+    <string name="suggestion_type_problem">نوع مقترح: مشكلة وحل — الأولى مشكلة محتملة والثانية حل محتمل (إشارات صريحة: %1$s)</string>
+    <string name="suggestion_type_cause">نوع مقترح: سبب ونتيجة — الأولى سبب محتمل والثانية نتيجة (إشارات صريحة: %1$s). لم يتحقق التطبيق من صحة السببية</string>
+    <string name="merge_button">دمج</string>
+    <string name="merge_title">دمج ملاحظتين</string>
+    <string name="merge_save">حفظ كملاحظة جديدة</string>
+    <string name="merge_other">اقتراح آخر</string>
+    <string name="msg_merge_saved">تم حفظ الملاحظة المدمجة</string>
 </resources>

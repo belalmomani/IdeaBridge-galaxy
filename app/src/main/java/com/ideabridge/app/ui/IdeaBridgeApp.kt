@@ -235,6 +235,12 @@ private fun GalaxyRoute(id: Long, vm: IdeasViewModel, nav: Nav) {
             vm.acceptSuggestion(s) { r -> handleResult(r, context, nav, R.string.msg_relation_added) }
         },
         onRejectSuggestion = vm::rejectSuggestion,
+        onSaveMerged = { title, body, done ->
+            vm.saveMerged(id, title, body) { r ->
+                handleResult(r, context, nav, R.string.msg_merge_saved)
+                done(r is SaveResult.Success)
+            }
+        },
     )
 }
 

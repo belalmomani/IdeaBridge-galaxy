@@ -97,4 +97,35 @@ class LinkEngineTest {
         assertEquals(2, LinkEngine(EngineConfig(maxSuggestions = 2)).suggest(chickens).size)
         assertTrue(LinkEngine(EngineConfig(similarityThreshold = 90)).suggest(chickens).isEmpty())
     }
+
+    @Test fun problemAndSolutionCuesGiveAProblemSolutionSuggestionWithTheProblemFirst() {
+        val problem = doc(1, "تقليل هدر الأعلاف في المزرعة")
+        val solution = doc(2, "تطبيق لمتابعة الأعلاف في المزرعة")
+        for (input in listOf(listOf(problem, solution), listOf(solution, problem))) {
+            val s = engine.suggest(input).single()
+            assertEquals(SuggestionType.PROBLEM_SOLUTION, s.type)
+            assertEquals(1L, s.firstId)
+            assertEquals(2L, s.secondId)
+            assertTrue(s.cues.containsAll(listOf("هدر", "تطبيق")))
+        }
+    }
+
+    @Test fun anExplicitCauseCueMakesThatNoteTheCause() {
+        val cause = doc(1, "الحرارة العالية تسبب نفوق الدجاج")
+        val effect = doc(2, "نفوق الدجاج في الصيف")
+        for (input in listOf(listOf(cause, effect), listOf(effect, cause))) {
+            val s = engine.suggest(input).single()
+            assertEquals(SuggestionType.CAUSE_EFFECT, s.type)
+            assertEquals(1L, s.firstId)
+            assertEquals(listOf("تسبب"), s.cues)
+        }
+    }
+
+    @Test fun withoutAnExplicitCueOrWhenBothClaimCausationTheTypeStaysSimilarity() {
+        val plain = engine.suggest(listOf(doc(1, "تربية الدجاج"), doc(2, "تغذية الدجاج"))).single()
+        assertEquals(SuggestionType.SIMILARITY, plain.type)
+        assertTrue(plain.cues.isEmpty())
+        val both = engine.suggest(listOf(doc(1, "الحرارة تسبب نفوق الدجاج"), doc(2, "الإهمال يسبب نفوق الدجاج"))).single()
+        assertEquals(SuggestionType.SIMILARITY, both.type)
+    }
 }

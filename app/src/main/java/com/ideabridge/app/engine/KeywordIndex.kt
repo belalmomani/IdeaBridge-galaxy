@@ -32,6 +32,10 @@ internal class Entry(
     val norm: Double,
 ) {
     val isThin: Boolean get() = weights.isEmpty()
+
+    /** الكلمات الأصلية في الفكرة التي تطابق قائمة إشارات صريحة. */
+    fun cueWords(lexicon: Set<String>): List<String> =
+        terms.filterKeys { Lexicon.cueKey(it) in lexicon }.values.toList()
 }
 
 /**
