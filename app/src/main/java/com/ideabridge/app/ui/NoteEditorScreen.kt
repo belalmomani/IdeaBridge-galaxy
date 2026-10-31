@@ -77,26 +77,30 @@ fun NoteEditorScreen(
                 val currentBody = bodyField.text // يُقرأ من الحالة مباشرة حتى لا تُحفظ نسخة قديمة عند إعادة المحاولة
                 val effective = IdeaRules.effectiveTitle(title, currentBody)
                 if (effective.isEmpty()) { status = SaveStatus.Idle; break }
-                val result = withContext(NonCancellable) { save(noteId, effective, currentBody) }
+                // رقم الملاحظة يُسجَّل داخل الكتلة نفسها: لو أُلغيت هذه الكوروتين بعد اكتمال الحفظ
+                // (بسبب كتابة جديدة) لا يضيع الرقم، فلا تُنشأ ملاحظة مكررة في الحفظ التالي.
+                val result = withContext(NonCancellable) {
+                    val r = save(noteId, effective, currentBody)
+                    if (r is SaveResult.Success) noteId = r.value
+                    r
+                }
                 when (result) {
-                    is SaveResult.Success -> { noteId = result.value; status = SaveStatus.Saved }
+                    is SaveResult.Success -> status = SaveStatus.Saved
                     is SaveResult.Failure -> { status = SaveStatus.Failed; onError(result.error); break }
                 }
             } while (dirty)
-            // اقتراح مجرة أنسب: يظهر بعد الحفظ فقط، ولا يُنقل شيء دون موافقة المستخدم
-            if (status == SaveStatus.Saved && noteId != 0L) {
-                move = try {
-                    suggestGalaxy(noteId)?.takeIf { it.galaxyId !in dismissedGalaxies }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    null
-                }
-            }
-        } catch (e: CancellationException) {
-            throw e
         } finally {
             saving = false
+        }
+        // اقتراح مجرة أنسب: بعد تحرير قفل الحفظ حتى لا يُعطّل حفظ التعديلات الجديدة، ولا يُنقل شيء دون موافقة
+        if (status == SaveStatus.Saved && noteId != 0L) {
+            move = try {
+                suggestGalaxy(noteId)?.takeIf { it.galaxyId !in dismissedGalaxies }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
         }
     }
 
@@ -107,7 +111,14 @@ fun NoteEditorScreen(
         flush()
     }
 
-    fun leave() { scope.launch { flush(); onBack() } }
+    // عند الخروج ننتظر انتهاء أي حفظ جارٍ ثم نحفظ آخر نص قبل العودة
+    fun leave() {
+        scope.launch {
+            while (saving) delay(30)
+            flush()
+            onBack()
+        }
+    }
     BackHandler { leave() }
 
     val relations by remember(noteId) { relationsOf(noteId) }.collectAsStateWithLifecycle(initialValue = emptyList())
