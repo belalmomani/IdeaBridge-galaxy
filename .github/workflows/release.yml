@@ -64,6 +64,17 @@ jobs:
           "$APKSIGNER" verify --print-certs "$APK" > certs.txt
           if grep -qi "Android Debug" certs.txt; then echo "APK is debug-signed, not the release key"; exit 1; fi
           grep "SHA-256" certs.txt
+          # مقارنة تلقائية ببصمة مفتاحك السابق (معلومة عامة وليست سرًا)
+          EXPECTED="a6e6b7da63d0cb3c92a61a5b36e10aa129bb06559e86a0abca2c5864aa55cc89"
+          ACTUAL=$(grep -i "certificate SHA-256 digest" certs.txt | head -n1 | sed 's/.*: //' | tr -d ': ' | tr 'A-Z' 'a-z')
+          echo "Expected: $EXPECTED"
+          echo "Actual:   $ACTUAL"
+          if [ "$ACTUAL" = "$EXPECTED" ]; then
+            echo "MATCH: signed with the same certificate as the previous key"
+          else
+            echo "MISMATCH: this APK is NOT signed with the previous key, so it cannot update an older release"
+            exit 1
+          fi
 
       - name: Remove keystore
         if: always()
