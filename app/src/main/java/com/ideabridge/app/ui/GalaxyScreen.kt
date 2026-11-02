@@ -98,7 +98,7 @@ fun GalaxyScreen(
                                 relations = relations,
                                 suggestions = suggestions,
                                 showSuggestions = showSuggestions,
-                                color = galaxyColor(galaxy.colorIndex),
+                                style = planetStyle(galaxy.colorIndex),
                                 onOpenNote = onOpenNote,
                                 modifier = Modifier.fillMaxSize(),
                             )

@@ -1,17 +1,21 @@
 package com.ideabridge.app.ui
 
+import android.content.Context
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
@@ -23,6 +27,7 @@ import com.ideabridge.app.IdeaRules
 import com.ideabridge.app.R
 import com.ideabridge.app.SaveResult
 import com.ideabridge.app.engine.ListEditing
+import com.ideabridge.app.engine.NoteShare
 import com.ideabridge.app.data.RelationRow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -30,6 +35,20 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/** يفتح قائمة المشاركة في أندرويد بنص الملاحظة؛ لا يحتاج أي إذن ولا يرسل شيئًا بنفسه. */
+private fun shareNote(context: Context, subject: String, text: String, chooserTitle: String) {
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    try {
+        context.startActivity(Intent.createChooser(send, chooserTitle))
+    } catch (e: Exception) {
+        // لا يوجد تطبيق يستقبل النص: لا شيء نفعله
+    }
+}
 
 private enum class SaveStatus { Idle, Saving, Saved, Failed }
 
@@ -65,6 +84,8 @@ fun NoteEditorScreen(
     var move by remember { mutableStateOf<GalaxyMove?>(null) }
     val dismissedGalaxies = remember { mutableSetOf<Long>() }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val chooserLabel = stringResource(R.string.share_chooser)
 
     // يحفظ آخر نص؛ وإن وصل تعديل أثناء الحفظ يعيد المحاولة بعد انتهائه (لا نسخ مكررة).
     suspend fun flush() {
@@ -137,6 +158,14 @@ fun NoteEditorScreen(
                 style = MaterialTheme.typography.labelMedium,
                 color = if (status == SaveStatus.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            val shareText = NoteShare.format(title, body)
+            if (shareText.isNotBlank()) {
+                IconButton(
+                    onClick = { shareNote(context, IdeaRules.effectiveTitle(title, body), shareText, chooserLabel) },
+                ) {
+                    Icon(Icons.Filled.Share, contentDescription = stringResource(R.string.share))
+                }
+            }
             if (noteId != 0L) {
                 IconButton(onClick = { confirmDelete = true }) {
                     Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.delete), tint = MaterialTheme.colorScheme.error)

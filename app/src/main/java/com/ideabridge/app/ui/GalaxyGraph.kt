@@ -49,6 +49,8 @@ data class GraphNode(
     val radius: Float,
     val glow: Boolean,
     val color: Color,
+    /** إن وُجد يُرسم العنصر كوكبًا حقيقيًا بدل الكرة المتوهجة. */
+    val style: PlanetStyle? = null,
 )
 
 /**
@@ -75,6 +77,7 @@ fun PlanetGraph(
 
     val density = LocalDensity.current.density
     val textMeasurer = rememberTextMeasurer()
+    val detailedAll = nodes.size <= 80
     val ids = remember(nodes) { nodes.map { it.id } }
 
     // التخطيط يُحسب خارج الخيط الرئيسي حتى لا تتجمد الواجهة مع كثرة العقد
@@ -159,10 +162,15 @@ fun PlanetGraph(
                     ),
                     radius = haloRadius, center = c,
                 )
-                drawCircle(
-                    brush = Brush.radialGradient(listOf(Color.White, n.color), center = c, radius = r),
-                    radius = r, center = c,
-                )
+                if (n.style != null) {
+                    // التفاصيل السطحية تُرسم فقط مع عدد معقول من الكواكب وحجم كافٍ، حفاظًا على سلاسة التحريك
+                    drawPlanet(n.style, c, r, detailed = detailedAll && r >= 9f * density)
+                } else {
+                    drawCircle(
+                        brush = Brush.radialGradient(listOf(Color.White, n.color), center = c, radius = r),
+                        radius = r, center = c,
+                    )
+                }
                 if (showLabels) {
                     val label = textMeasurer.measure(
                         text = n.label,
@@ -191,13 +199,13 @@ fun GalaxyGraph(
     relations: List<RelationEntity>,
     suggestions: List<LinkSuggestion>,
     showSuggestions: Boolean,
-    color: Color,
+    style: PlanetStyle,
     onOpenNote: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val now = remember { System.currentTimeMillis() }
     val solid = remember(relations) { relations.map { it.firstIdeaId to it.secondIdeaId } }
-    val nodes = remember(notes, relations, color) {
+    val nodes = remember(notes, relations, style) {
         val degree = HashMap<Long, Int>()
         relations.forEach {
             degree[it.firstIdeaId] = (degree[it.firstIdeaId] ?: 0) + 1
@@ -205,7 +213,7 @@ fun GalaxyGraph(
         }
         notes.map {
             val len = it.title.length + (it.description?.length ?: 0)
-            GraphNode(it.id, it.title, GalaxyLayout.planetRadius(len, degree[it.id] ?: 0), now - it.updatedAt < 86_400_000L, color)
+            GraphNode(it.id, it.title, GalaxyLayout.planetRadius(len, degree[it.id] ?: 0), now - it.updatedAt < 86_400_000L, style.main, style)
         }
     }
     val dashed = remember(suggestions, showSuggestions) {
@@ -213,7 +221,7 @@ fun GalaxyGraph(
     }
     PlanetGraph(
         nodes = nodes, solidEdges = solid, dashedEdges = dashed, layoutEdges = solid,
-        dashedColor = color, emptyText = stringResource(R.string.graph_empty),
+        dashedColor = style.main, emptyText = stringResource(R.string.graph_empty),
         onOpen = onOpenNote, modifier = modifier,
     )
 }
@@ -234,7 +242,7 @@ fun GalaxyMapGraph(
             degree[it.secondId] = (degree[it.secondId] ?: 0) + 1
         }
         galaxies.map {
-            GraphNode(it.id, it.name, GalaxyLayout.planetRadius(it.noteCount * 150, degree[it.id] ?: 0), false, galaxyColor(it.colorIndex))
+            GraphNode(it.id, it.name, GalaxyLayout.planetRadius(it.noteCount * 150, degree[it.id] ?: 0) + 6f, false, galaxyColor(it.colorIndex), planetStyle(it.colorIndex))
         }
     }
     PlanetGraph(

@@ -22,6 +22,7 @@ object IdeaRules {
     const val MAX_LENGTH = 140          // أقصى طول للعنوان
     const val MAX_DESCRIPTION = 20000  // أقصى طول لنص الملاحظة
     const val MAX_GALAXY_NAME = 40
+    const val GALAXY_STYLE_COUNT = 8   // عدد الكواكب المتاحة لشكل المجرة (يطابق قائمة Planets في الواجهة)
 
     fun cleanTitle(raw: String): String = raw.trim()
     fun cleanDescription(raw: String?): String? = raw?.trim()?.takeIf { it.isNotEmpty() }

@@ -180,7 +180,7 @@ private fun GalaxiesRoute(vm: IdeasViewModel, nav: Nav) {
             title = stringResource(R.string.galaxy_create_title),
             confirmLabel = stringResource(R.string.create),
             initialName = "",
-            initialColor = (galaxies?.size ?: 0) % GalaxyPalette.size,
+            initialColor = (galaxies?.size ?: 0) % Planets.size,
             onConfirm = { name, color ->
                 // لا تُغلق النافذة إلا بعد نجاح الإنشاء حتى لا يضيع الاسم المكتوب
                 vm.createGalaxy(name, color) { r ->

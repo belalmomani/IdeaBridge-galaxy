@@ -111,7 +111,7 @@ class IdeaRepository(
                 val id = if (existing != null) {
                     existing.id
                 } else {
-                    val color = Math.floorMod(g.colorIndex, 6)
+                    val color = Math.floorMod(g.colorIndex, IdeaRules.GALAXY_STYLE_COUNT)
                     val newId = dao.insertGalaxy(GalaxyEntity(name = g.name, colorIndex = color, createdAt = if (g.createdAt > 0) g.createdAt else clock()))
                     galaxies.add(GalaxyEntity(newId, g.name, color, g.createdAt))
                     galaxiesAdded++

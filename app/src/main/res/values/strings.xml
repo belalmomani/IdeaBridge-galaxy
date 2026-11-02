@@ -160,4 +160,17 @@
     <string name="merge_save">حفظ كملاحظة جديدة</string>
     <string name="merge_other">اقتراح آخر</string>
     <string name="msg_merge_saved">تم حفظ الملاحظة المدمجة</string>
+
+    <!-- المشاركة والكواكب -->
+    <string name="share">مشاركة</string>
+    <string name="share_chooser">مشاركة الملاحظة عبر</string>
+    <string name="galaxy_planet_label">اختر كوكب المجرة</string>
+    <string name="planet_earth">الأرض</string>
+    <string name="planet_mars">المريخ</string>
+    <string name="planet_jupiter">المشتري</string>
+    <string name="planet_saturn">زحل</string>
+    <string name="planet_venus">الزهرة</string>
+    <string name="planet_neptune">نبتون</string>
+    <string name="planet_uranus">أورانوس</string>
+    <string name="planet_mercury">عطارد</string>
 </resources>

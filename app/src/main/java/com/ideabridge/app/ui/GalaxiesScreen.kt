@@ -1,6 +1,5 @@
 package com.ideabridge.app.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -171,7 +170,6 @@ private fun GalaxyLinksPanel(links: List<LinkSuggestion>, galaxies: List<GalaxyR
 
 @Composable
 private fun GalaxyCard(galaxy: GalaxyRow, onClick: () -> Unit) {
-    val color = galaxyColor(galaxy.colorIndex)
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -181,7 +179,7 @@ private fun GalaxyCard(galaxy: GalaxyRow, onClick: () -> Unit) {
         ),
     ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            GalaxyOrb(color, 56.dp)
+            PlanetOrb(planetStyle(galaxy.colorIndex), 56.dp)
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(galaxy.name, style = MaterialTheme.typography.titleMedium)
                 Text(
@@ -219,15 +217,8 @@ fun GalaxyEditDialog(
                     supportingText = { Text(stringResource(R.string.galaxy_name_hint)) },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    GalaxyPalette.forEachIndexed { index, c ->
-                        GalaxyOrb(
-                            color = c,
-                            size = if (index == color) 40.dp else 30.dp,
-                            modifier = Modifier.clickable { color = index },
-                        )
-                    }
-                }
+                Text(stringResource(R.string.galaxy_planet_label), style = MaterialTheme.typography.labelMedium)
+                PlanetPicker(selected = color, onSelect = { color = it })
             }
         },
         confirmButton = { TextButton(onClick = { onConfirm(name, color) }) { Text(confirmLabel) } },
