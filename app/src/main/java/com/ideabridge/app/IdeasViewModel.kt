@@ -13,6 +13,7 @@ import com.ideabridge.app.data.IdeaEntity
 import com.ideabridge.app.data.IdeaRepository
 import com.ideabridge.app.data.RelationEntity
 import com.ideabridge.app.data.RelationRow
+import com.ideabridge.app.data.TrashRow
 import com.ideabridge.app.data.RelationType
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.ideabridge.app.engine.BackupJson
@@ -22,6 +23,7 @@ import com.ideabridge.app.engine.GalaxyMatcher
 import com.ideabridge.app.engine.IdeaDoc
 import com.ideabridge.app.engine.LinkEngine
 import com.ideabridge.app.engine.LinkSuggestion
+import com.ideabridge.app.engine.SearchMatcher
 import com.ideabridge.app.engine.SuggestionType
 import com.ideabridge.app.engine.pairKey
 import kotlinx.coroutines.Dispatchers
@@ -52,7 +54,10 @@ class IdeasViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         // لا تبقى الشاشة بلا مجرة عند أول تشغيل
-        viewModelScope.launch { repo.ensureDefaultGalaxy() }
+        viewModelScope.launch {
+            repo.ensureDefaultGalaxy()
+            repo.purgeTrash() // ما مضى عليه 30 يومًا في السلة يُحذف نهائيًا
+        }
     }
 
     private val _query = MutableStateFlow("")
@@ -60,10 +65,19 @@ class IdeasViewModel(app: Application) : AndroidViewModel(app) {
     fun setQuery(value: String) { _query.value = value }
 
     /** كل الملاحظات مع البحث العام؛ null = جارٍ التحميل. */
-    val ideas: StateFlow<List<IdeaEntity>?> = _query
-        .flatMapLatest { repo.observeIdeas(it) }
-        .map<List<IdeaEntity>, List<IdeaEntity>?> { it }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val ideas: StateFlow<List<IdeaEntity>?> =
+        combine(repo.observeIdeas(""), repo.observeGalaxies(), _query) { notes, galaxies, query ->
+            if (query.isBlank()) {
+                notes
+            } else {
+                // البحث يشمل العنوان والنص واسم مجرة الملاحظة، ويتسامح مع اختلاف الكتابة العربية
+                val galaxyNames = galaxies.associate { it.id to it.name }
+                notes.filter { SearchMatcher.matches(query, it.title, it.description, galaxyNames[it.galaxyId]) }
+            }
+        }
+            .flowOn(Dispatchers.Default)
+            .map<List<IdeaEntity>, List<IdeaEntity>?> { it }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** كل الملاحظات بلا بحث (لمنتقي العلاقات). */
     val allIdeas: StateFlow<List<IdeaEntity>?> = repo.observeIdeas("")
@@ -75,7 +89,10 @@ class IdeasViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun galaxy(id: Long): Flow<Loaded<GalaxyEntity>> = repo.observeGalaxy(id).map { Loaded(it) }
-    fun notesIn(galaxyId: Long, query: String): Flow<List<IdeaEntity>> = repo.observeIdeasInGalaxy(galaxyId, query)
+    fun notesIn(galaxyId: Long, query: String): Flow<List<IdeaEntity>> =
+        repo.observeIdeasInGalaxy(galaxyId, "").map { notes ->
+            if (query.isBlank()) notes else notes.filter { SearchMatcher.matches(query, it.title, it.description) }
+        }
     fun idea(id: Long): Flow<Loaded<IdeaEntity>> = repo.observeIdea(id).map { Loaded(it) }
     fun relations(ideaId: Long): Flow<List<RelationRow>> =
         if (ideaId == 0L) emptyFlow() else repo.observeRelations(ideaId)
@@ -115,6 +132,11 @@ class IdeasViewModel(app: Application) : AndroidViewModel(app) {
     /** يحفظ ملاحظة مدمجة اقترحها المحرك وقبلها المستخدم، داخل المجرة المحددة. */
     fun saveMerged(galaxyId: Long, title: String, body: String, onResult: (SaveResult<Long>) -> Unit) {
         viewModelScope.launch { onResult(repo.addIdea(title, body, galaxyId)) }
+    }
+
+    /** يثبّت الملاحظة أو يلغي تثبيتها. */
+    fun setPinned(noteId: Long, pinned: Boolean, onResult: (SaveResult<Unit>) -> Unit) {
+        viewModelScope.launch { onResult(repo.setPinned(noteId, pinned)) }
     }
 
     fun moveNote(noteId: Long, galaxyId: Long, onResult: (SaveResult<Unit>) -> Unit) {
@@ -221,9 +243,9 @@ class IdeasViewModel(app: Application) : AndroidViewModel(app) {
     fun updateGalaxy(id: Long, name: String, colorIndex: Int, onResult: (SaveResult<Unit>) -> Unit) {
         viewModelScope.launch { onResult(repo.updateGalaxy(id, name, colorIndex)) }
     }
-    /** يحذف المجرة مع التقاط ما حُذف ليمكن التراجع. */
+    /** يحذف المجرة ويحفظها في السلة، ويعيد ما حُذف للتراجع الفوري. */
     fun deleteGalaxy(id: Long, onResult: (SaveResult<DeletedSnapshot>) -> Unit) {
-        viewModelScope.launch { onResult(captureThenDelete(repo.captureGalaxy(id)) { repo.deleteGalaxy(id) }) }
+        viewModelScope.launch { onResult(repo.deleteGalaxyToTrash(id)) }
     }
 
     /** حفظ تلقائي من المحرر: ينشئ الملاحظة إن كان noteId = 0 وإلا يحدّثها، ويعيد معرفها. */
@@ -238,13 +260,27 @@ class IdeasViewModel(app: Application) : AndroidViewModel(app) {
         }
 
     fun deleteIdea(id: Long, onResult: (SaveResult<DeletedSnapshot>) -> Unit) {
-        viewModelScope.launch { onResult(captureThenDelete(repo.captureNote(id)) { repo.deleteIdea(id) }) }
+        viewModelScope.launch { onResult(repo.deleteNoteToTrash(id)) }
     }
     fun addRelation(first: Long, second: Long, type: RelationType, onResult: (SaveResult<Long>) -> Unit) {
         viewModelScope.launch { onResult(repo.addRelation(first, second, type)) }
     }
     fun deleteRelation(id: Long, onResult: (SaveResult<DeletedSnapshot>) -> Unit) {
         viewModelScope.launch { onResult(captureThenDelete(repo.captureRelation(id)) { repo.deleteRelation(id) }) }
+    }
+
+    val trash: StateFlow<List<TrashRow>?> = repo.observeTrash()
+        .map<List<TrashRow>, List<TrashRow>?> { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun restoreFromTrash(id: Long, onResult: (SaveResult<Unit>) -> Unit) {
+        viewModelScope.launch { onResult(repo.restoreFromTrash(id)) }
+    }
+    fun deleteForever(id: Long, onResult: (SaveResult<Unit>) -> Unit) {
+        viewModelScope.launch { onResult(repo.deleteForever(id)) }
+    }
+    fun emptyTrash(onResult: (SaveResult<Unit>) -> Unit) {
+        viewModelScope.launch { onResult(repo.emptyTrash()) }
     }
 
     fun restore(snapshot: DeletedSnapshot, onResult: (SaveResult<Unit>) -> Unit) {

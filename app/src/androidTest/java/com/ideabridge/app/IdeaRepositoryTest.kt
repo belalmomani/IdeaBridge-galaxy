@@ -8,6 +8,7 @@ import com.ideabridge.app.data.DeletedSnapshot
 import com.ideabridge.app.data.IdeaBridgeDatabase
 import com.ideabridge.app.data.IdeaRepository
 import com.ideabridge.app.data.RelationType
+import com.ideabridge.app.data.TrashKind
 import com.ideabridge.app.engine.BackupJson
 import com.ideabridge.app.engine.BackupParser
 import kotlinx.coroutines.flow.first
@@ -492,6 +493,174 @@ class UndoDeleteTest {
         assertEquals(IdeaError.IdeaNotFound, (repo.captureNote(999) as SaveResult.Failure).error)
         assertEquals(IdeaError.GalaxyNotFound, (repo.captureGalaxy(999) as SaveResult.Failure).error)
         assertEquals(IdeaError.RelationNotFound, (repo.captureRelation(999) as SaveResult.Failure).error)
+    }
+}
+
+@RunWith(AndroidJUnit4::class)
+class PinTest {
+    private lateinit var context: Context
+    private lateinit var db: IdeaBridgeDatabase
+    private lateinit var repo: IdeaRepository
+
+    @Before fun setUp() {
+        context = ApplicationProvider.getApplicationContext()
+        db = Room.inMemoryDatabaseBuilder(context, IdeaBridgeDatabase::class.java).build()
+        repo = IdeaRepository(db)
+    }
+
+    @After fun tearDown() { db.close() }
+
+    private fun id(r: SaveResult<Long>): Long = (r as SaveResult.Success).value
+    private suspend fun order() = repo.observeIdeas("").first().map { it.id }
+
+    @Test fun pinnedNotesComeFirstAndPinningChangesNothingElse() = runBlocking {
+        val g = id(repo.createGalaxy("أ", 0))
+        val old = id(repo.addIdea("قديمة", null, g))
+        val mid = id(repo.addIdea("وسطى", null, g))
+        val new = id(repo.addIdea("جديدة", null, g))
+        assertEquals(listOf(new, mid, old), order())
+
+        val before = db.dao().getById(old)!!
+        assertTrue(repo.setPinned(old, true) is SaveResult.Success)
+        assertEquals(listOf(old, new, mid), order())
+        assertEquals(before.copy(pinned = true), db.dao().getById(old))
+
+        assertTrue(repo.setPinned(old, false) is SaveResult.Success)
+        assertEquals(listOf(new, mid, old), order())
+    }
+
+    @Test fun pinningAMissingNoteFails() = runBlocking {
+        assertEquals(IdeaError.IdeaNotFound, (repo.setPinned(999, true) as SaveResult.Failure).error)
+    }
+
+    @Test fun pinnedStateSurvivesUndoDeleteAndBackupImport() = runBlocking {
+        val g = id(repo.createGalaxy("أ", 0))
+        val n = id(repo.addIdea("مهمة", "نص", g))
+        repo.setPinned(n, true)
+
+        val captured = (repo.captureNote(n) as SaveResult.Success).value
+        repo.deleteIdea(n)
+        repo.restore(captured)
+        assertTrue(db.dao().getById(n)!!.pinned)
+
+        val snap = (repo.loadSnapshot() as SaveResult.Success).value
+        val backup = (BackupParser.parse(BackupJson.toJson(snap.galaxies, snap.notes, snap.relations, 1L)) as BackupParser.Result.Ok).backup
+        val db2 = Room.inMemoryDatabaseBuilder(context, IdeaBridgeDatabase::class.java).build()
+        try {
+            IdeaRepository(db2).importBackup(backup)
+            assertTrue(db2.dao().getAllIdeas().single().pinned)
+        } finally {
+            db2.close()
+        }
+    }
+}
+
+@RunWith(AndroidJUnit4::class)
+class TrashTest {
+    private lateinit var db: IdeaBridgeDatabase
+    private var now = 1_000_000_000L
+    private lateinit var repo: IdeaRepository
+
+    @Before fun setUp() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        db = Room.inMemoryDatabaseBuilder(context, IdeaBridgeDatabase::class.java).build()
+        repo = IdeaRepository(db) { now }
+    }
+
+    @After fun tearDown() { db.close() }
+
+    private fun id(r: SaveResult<Long>): Long = (r as SaveResult.Success).value
+    private fun snap(r: SaveResult<DeletedSnapshot>): DeletedSnapshot = (r as SaveResult.Success).value
+    private suspend fun trash() = repo.observeTrash().first()
+
+    @Test fun deletedNoteGoesToTrashAndIsRestoredWithSameIdAndLinks() = runBlocking {
+        val g = id(repo.createGalaxy("أ", 2))
+        val n1 = id(repo.addIdea("مهمة", "نص", g))
+        val n2 = id(repo.addIdea("أخرى", null, g))
+        repo.setPinned(n1, true)
+        repo.addRelation(n1, n2, RelationType.CAUSE)
+        val before = db.dao().getById(n1)!!
+
+        snap(repo.deleteNoteToTrash(n1))
+        assertNull(db.dao().getById(n1))
+        assertTrue(db.dao().getAllRelations().isEmpty())
+        val item = trash().single()
+        assertEquals(TrashKind.NOTE, item.kind)
+        assertEquals("مهمة", item.title)
+
+        assertTrue(repo.restoreFromTrash(item.id) is SaveResult.Success)
+        assertEquals(before, db.dao().getById(n1))
+        assertEquals(1, db.dao().getAllRelations().size)
+        assertTrue(trash().isEmpty())
+        assertEquals(IdeaError.TrashItemNotFound, (repo.restoreFromTrash(item.id) as SaveResult.Failure).error)
+    }
+
+    @Test fun deletedGalaxyGoesToTrashWithEverythingInsideAndComesBack() = runBlocking {
+        val a = id(repo.createGalaxy("طبخ", 3))
+        val b = id(repo.createGalaxy("باقية", 1))
+        val n1 = id(repo.addIdea("1", "نص", a))
+        val n2 = id(repo.addIdea("2", null, a))
+        val keep = id(repo.addIdea("3", null, b))
+        repo.addRelation(n1, n2, RelationType.SIMILARITY)
+        repo.addRelation(n1, keep, RelationType.DEPENDENCY)
+        val galaxiesBefore = db.dao().getAllGalaxies()
+        val ideasBefore = db.dao().getAllIdeas()
+
+        snap(repo.deleteGalaxyToTrash(a))
+        val item = trash().single()
+        assertEquals(TrashKind.GALAXY, item.kind)
+        assertEquals("طبخ", item.title)
+        assertEquals(2, item.noteCount)
+
+        assertTrue(repo.restoreFromTrash(item.id) is SaveResult.Success)
+        assertEquals(galaxiesBefore, db.dao().getAllGalaxies())
+        assertEquals(ideasBefore, db.dao().getAllIdeas())
+        assertEquals(2, db.dao().getAllRelations().size)
+    }
+
+    @Test fun immediateUndoRemovesTheTrashCopyToAvoidDuplicates() = runBlocking {
+        val g = id(repo.createGalaxy("أ", 0))
+        val n = id(repo.addIdea("ملاحظة", null, g))
+        val deleted = snap(repo.deleteNoteToTrash(n))
+        assertEquals(1, trash().size)
+        assertTrue(repo.restore(deleted) is SaveResult.Success)
+        assertNotNull(db.dao().getById(n))
+        assertTrue(trash().isEmpty())
+    }
+
+    @Test fun purgeRemovesOnlyItemsOlderThanThirtyDays() = runBlocking {
+        val g = id(repo.createGalaxy("أ", 0))
+        val old = id(repo.addIdea("قديمة", null, g))
+        val recent = id(repo.addIdea("حديثة", null, g))
+        repo.deleteNoteToTrash(old)
+        now += IdeaRepository.TRASH_RETENTION_MS + 1
+        repo.deleteNoteToTrash(recent)
+        assertEquals(2, trash().size)
+        assertTrue(repo.purgeTrash() is SaveResult.Success)
+        assertEquals(listOf("حديثة"), trash().map { it.title })
+    }
+
+    @Test fun deleteForeverAndEmptyTrash() = runBlocking {
+        val g = id(repo.createGalaxy("أ", 0))
+        val a = id(repo.addIdea("أ1", null, g))
+        val b = id(repo.addIdea("ب1", null, g))
+        val c = id(repo.addIdea("ج1", null, g))
+        repo.deleteNoteToTrash(a); repo.deleteNoteToTrash(b); repo.deleteNoteToTrash(c)
+        val first = trash().first()
+        assertTrue(repo.deleteForever(first.id) is SaveResult.Success)
+        assertEquals(2, trash().size)
+        assertEquals(IdeaError.TrashItemNotFound, (repo.deleteForever(first.id) as SaveResult.Failure).error)
+        assertTrue(repo.emptyTrash() is SaveResult.Success)
+        assertTrue(trash().isEmpty())
+    }
+
+    @Test fun trashedNotesNeverAppearInListsOrSearch() = runBlocking {
+        val g = id(repo.createGalaxy("أ", 0))
+        val n = id(repo.addIdea("سرية", "كلمة فريدة", g))
+        repo.deleteNoteToTrash(n)
+        assertTrue(repo.observeIdeas("").first().isEmpty())
+        assertTrue(repo.observeIdeas("فريدة").first().isEmpty())
+        assertTrue(db.dao().getAllIdeas().isEmpty())
     }
 }
 

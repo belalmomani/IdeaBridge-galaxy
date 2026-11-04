@@ -112,6 +112,7 @@ fun IdeaBridgeApp(vm: IdeasViewModel = viewModel()) {
                     "notes" -> NotesRoute(vm, nav)
                     "links" -> LinksRoute(vm, nav)
                     "settings" -> SettingsRoute(vm, nav)
+                    "trash" -> TrashRoute(vm, nav)
                     "galaxy" -> GalaxyRoute(a, vm, nav)
                     "note" -> NoteRoute(galaxyId = a, noteId = b, vm = vm, nav = nav)
                     "relate" -> RelateRoute(a, vm, nav)
@@ -258,9 +259,29 @@ private fun LinksRoute(vm: IdeasViewModel, nav: Nav) {
 }
 
 @Composable
+private fun TrashRoute(vm: IdeasViewModel, nav: Nav) {
+    val context = LocalContext.current
+    val items by vm.trash.collectAsStateWithLifecycle()
+    TrashScreen(
+        entries = items,
+        onRestore = { id ->
+            vm.restoreFromTrash(id) { r -> handleResult(r, context, nav, R.string.msg_trash_restored) }
+        },
+        onDeleteForever = { id ->
+            vm.deleteForever(id) { r -> handleResult(r, context, nav, R.string.msg_trash_item_deleted) }
+        },
+        onEmptyTrash = {
+            vm.emptyTrash { r -> handleResult(r, context, nav, R.string.msg_trash_emptied) }
+        },
+        onBack = nav.pop,
+    )
+}
+
+@Composable
 private fun SettingsRoute(vm: IdeasViewModel, nav: Nav) {
     val context = LocalContext.current
     SettingsScreen(
+        onOpenTrash = { nav.push("trash") },
         onExport = { uri ->
             vm.exportBackup(uri) { ok ->
                 nav.say(context.getString(if (ok) R.string.backup_done else R.string.backup_failed))
@@ -287,7 +308,7 @@ private fun SettingsRoute(vm: IdeasViewModel, nav: Nav) {
 @Composable
 private fun NoteRoute(galaxyId: Long, noteId: Long, vm: IdeasViewModel, nav: Nav) {
     if (noteId == 0L) {
-        EditorHost(galaxyId, 0L, "", "", vm, nav)
+        EditorHost(galaxyId, 0L, "", "", false, vm, nav)
         return
     }
     val state by remember(noteId) { vm.idea(noteId) }.collectAsStateWithLifecycle(initialValue = null)
@@ -304,18 +325,19 @@ private fun NoteRoute(galaxyId: Long, noteId: Long, vm: IdeasViewModel, nav: Nav
             // العنوان المشتق من أول سطر لا يُكرَّر في حقل العنوان
             val title = if (IdeaRules.effectiveTitle("", body) == note.title) "" else note.title
             // القيم الابتدائية تُقرأ مرة واحدة فقط، فلا يُعاد ضبط المحرر مع كل تحديث للقاعدة أثناء الكتابة
-            EditorHost(galaxyId, noteId, title, body, vm, nav)
+            EditorHost(galaxyId, noteId, title, body, note.pinned, vm, nav)
         }
     }
 }
 
 @Composable
-private fun EditorHost(galaxyId: Long, noteId: Long, title: String, body: String, vm: IdeasViewModel, nav: Nav) {
+private fun EditorHost(galaxyId: Long, noteId: Long, title: String, body: String, pinned: Boolean, vm: IdeasViewModel, nav: Nav) {
     val context = LocalContext.current
     NoteEditorScreen(
         initialNoteId = noteId,
         initialTitle = title,
         initialBody = body,
+        initialPinned = pinned,
         relationsOf = vm::relations,
         save = { id, t, b -> vm.saveNote(id, galaxyId, t, b) },
         onBack = nav.pop,
@@ -329,6 +351,12 @@ private fun EditorHost(galaxyId: Long, noteId: Long, title: String, body: String
         },
         onError = { nav.say(context.getString(it.messageRes())) },
         suggestGalaxy = vm::suggestGalaxy,
+        onTogglePin = { id, value, done ->
+            vm.setPinned(id, value) { r ->
+                if (r is SaveResult.Failure) nav.say(context.getString(r.error.messageRes()))
+                done(r is SaveResult.Success)
+            }
+        },
         onMove = { id, galaxyId ->
             vm.moveNote(id, galaxyId) { r -> handleResult(r, context, nav, R.string.msg_note_moved) }
         },

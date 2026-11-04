@@ -23,7 +23,7 @@ import com.ideabridge.app.IdeaRules
 import com.ideabridge.app.R
 import com.ideabridge.app.data.GalaxyRow
 import com.ideabridge.app.data.IdeaEntity
-import com.ideabridge.app.engine.ArabicText
+import com.ideabridge.app.engine.SearchMatcher
 import com.ideabridge.app.engine.LinkSuggestion
 
 /** الشاشة الرئيسية: خريطة المجرات (متصلة نصيًا) أو قائمتها، مع بحث يشمل أسماء المجرات والملاحظات. */
@@ -96,9 +96,8 @@ fun GalaxiesScreen(
     }
 }
 
-/** مطابقة الاسم مع تجاهل التشكيل والتطويل وأشكال الألف. */
-private fun matchesName(name: String, query: String): Boolean =
-    ArabicText.normalizeChars(name).contains(ArabicText.normalizeChars(query.trim()))
+/** مطابقة اسم المجرة مع تسامح في الكتابة العربية (تشكيل، ألف، ياء، تاء مربوطة، «ال»). */
+private fun matchesName(name: String, query: String): Boolean = SearchMatcher.matches(query, name)
 
 @Composable
 private fun SearchResults(

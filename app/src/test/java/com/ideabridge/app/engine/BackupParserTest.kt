@@ -17,7 +17,7 @@ class BackupParserTest {
             galaxies = listOf(GalaxyEntity(1, "ملاحظاتي", 0, 10L), GalaxyEntity(2, "طبخ", 3, 20L)),
             notes = listOf(
                 IdeaEntity(1, "عنوان", null, 11L, 12L, 1),
-                IdeaEntity(2, "فيها \"اقتباس\"", "سطر1\nسطر2", 13L, 14L, 2),
+                IdeaEntity(2, "فيها \"اقتباس\"", "سطر1\nسطر2", 13L, 14L, 2, true),
             ),
             relations = listOf(RelationEntity(1, 1, 2, RelationType.CAUSE, 15L)),
             exportedAt = 99L,
@@ -29,6 +29,8 @@ class BackupParserTest {
         assertEquals("سطر1\nسطر2", b.notes[1].body)
         assertEquals(2L, b.notes[1].galaxyId)
         assertEquals(13L, b.notes[1].createdAt)
+        assertTrue(b.notes[1].pinned)
+        assertTrue(!b.notes[0].pinned)
         assertEquals(1, b.relations.size)
         assertEquals(RelationType.CAUSE, b.relations[0].type)
     }

@@ -6,7 +6,7 @@ import com.ideabridge.app.engine.ListEditing
 enum class IdeaError {
     EmptyTitle, TitleTooLong, DescriptionTooLong,
     SameIdea, IdeaNotFound, RelationNotFound, DuplicateRelation,
-    EmptyGalaxyName, GalaxyNameTooLong, GalaxyNotFound, Unknown
+    EmptyGalaxyName, GalaxyNameTooLong, GalaxyNotFound, TrashItemNotFound, Unknown
 }
 
 /** استثناء داخلي لإلغاء معاملة قاعدة البيانات بخطأ معروف. */

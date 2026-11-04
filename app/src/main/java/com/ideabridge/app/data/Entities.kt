@@ -44,6 +44,8 @@ data class IdeaEntity(
     val createdAt: Long,
     val updatedAt: Long,
     @ColumnInfo(defaultValue = "0") val galaxyId: Long = 0,
+    /** ملاحظة مثبّتة تظهر أعلى القوائم. */
+    @ColumnInfo(defaultValue = "0") val pinned: Boolean = false,
 )
 
 /** علاقة موجّهة: الملاحظة الأولى ← (النوع) ← الملاحظة الثانية. */
@@ -103,4 +105,29 @@ data class LinkRow(
     val secondTitle: String,
     val firstGalaxy: String,
     val secondGalaxy: String,
+)
+
+object TrashKind {
+    const val NOTE = "NOTE"
+    const val GALAXY = "GALAXY"
+}
+
+/** عنصر في سلة المحذوفات: نسخة كاملة (JSON) مما حُذف لإمكان استعادته بمعرفاته وروابطه. */
+@Entity(tableName = "trash")
+data class TrashEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val kind: String,
+    val title: String,
+    val noteCount: Int,
+    val deletedAt: Long,
+    val payload: String,
+)
+
+/** صف عرض للسلة بلا النص الكامل (حتى لا يتجاوز حجم صف القراءة). */
+data class TrashRow(
+    val id: Long,
+    val kind: String,
+    val title: String,
+    val noteCount: Int,
+    val deletedAt: Long,
 )

@@ -26,7 +26,7 @@ object BackupJson {
         sb.append("\n  ],\n  \"notes\": [")
         sb.append(notes.joinToString(",") {
             "\n    {\"id\": ${it.id}, \"galaxyId\": ${it.galaxyId}, \"title\": ${quote(it.title)}, " +
-                "\"body\": ${quote(it.description.orEmpty())}, \"createdAt\": ${it.createdAt}, \"updatedAt\": ${it.updatedAt}}"
+                "\"body\": ${quote(it.description.orEmpty())}, \"createdAt\": ${it.createdAt}, \"updatedAt\": ${it.updatedAt}, \"pinned\": ${it.pinned}}"
         })
         sb.append("\n  ],\n  \"relations\": [")
         sb.append(relations.joinToString(",") {

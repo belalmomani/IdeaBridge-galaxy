@@ -173,4 +173,33 @@
     <string name="planet_neptune">نبتون</string>
     <string name="planet_uranus">أورانوس</string>
     <string name="planet_mercury">عطارد</string>
+
+    <!-- تثبيت الملاحظات -->
+    <string name="pinned">مثبّتة</string>
+    <string name="pin_note">تثبيت الملاحظة</string>
+    <string name="unpin_note">إلغاء التثبيت</string>
+
+    <!-- سلة المحذوفات -->
+    <string name="trash_title">سلة المحذوفات</string>
+    <string name="trash_retention">تُحفظ العناصر المحذوفة هنا 30 يومًا ثم تُحذف نهائيًا.</string>
+    <string name="trash_empty_title">السلة فارغة</string>
+    <string name="trash_empty_body">الملاحظات والمجرات التي تحذفها تظهر هنا لتتمكن من استعادتها.</string>
+    <string name="trash_untitled">بلا عنوان</string>
+    <string name="trash_kind_note">ملاحظة</string>
+    <string name="trash_kind_galaxy">مجرة (%1$d ملاحظة)</string>
+    <string name="trash_deleted_at">حُذفت: %1$s</string>
+    <string name="trash_restore">استعادة</string>
+    <string name="trash_delete_forever">حذف نهائي</string>
+    <string name="trash_empty_action">إفراغ السلة</string>
+    <string name="trash_empty_confirm_title">إفراغ السلة؟</string>
+    <string name="trash_empty_confirm_message">سيُحذف كل ما في السلة نهائيًا ولا يمكن استعادته.</string>
+    <string name="trash_item_delete_title">حذف نهائي؟</string>
+    <string name="trash_item_delete_message">سيُحذف «%1$s» نهائيًا من السلة ولا يمكن استعادته.</string>
+    <string name="msg_trash_restored">تمت الاستعادة من السلة</string>
+    <string name="msg_trash_item_deleted">حُذف نهائيًا</string>
+    <string name="msg_trash_emptied">أُفرغت السلة</string>
+    <string name="settings_trash_title">سلة المحذوفات</string>
+    <string name="settings_trash_body">ملاحظاتك ومجراتك المحذوفة تبقى في السلة 30 يومًا، ويمكنك استعادتها بمعرفاتها وروابطها.</string>
+    <string name="settings_trash_open">فتح السلة</string>
+    <string name="err_trash_not_found">العنصر لم يعد في السلة</string>
 </resources>

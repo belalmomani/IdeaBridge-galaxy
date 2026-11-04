@@ -4,7 +4,7 @@ package com.ideabridge.app.data
 data class ParsedGalaxy(val id: Long, val name: String, val colorIndex: Int, val createdAt: Long)
 data class ParsedNote(
     val id: Long, val galaxyId: Long, val title: String, val body: String,
-    val createdAt: Long, val updatedAt: Long,
+    val createdAt: Long, val updatedAt: Long, val pinned: Boolean = false,
 )
 data class ParsedRelation(val firstNoteId: Long, val secondNoteId: Long, val type: RelationType)
 data class ParsedBackup(
@@ -31,4 +31,6 @@ data class DeletedSnapshot(
     val galaxy: GalaxyEntity?,
     val notes: List<IdeaEntity>,
     val relations: List<RelationEntity>,
+    /** معرّف عنصر السلة الذي حُفظت فيه هذه النسخة (0 = لم تُحفظ). يُحذف عند التراجع الفوري. */
+    val trashId: Long = 0,
 )

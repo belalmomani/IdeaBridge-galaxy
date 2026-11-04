@@ -213,7 +213,7 @@ fun GalaxyGraph(
         }
         notes.map {
             val len = it.title.length + (it.description?.length ?: 0)
-            GraphNode(it.id, it.title, GalaxyLayout.planetRadius(len, degree[it.id] ?: 0), now - it.updatedAt < 86_400_000L, style.main, style)
+            GraphNode(it.id, it.title, GalaxyLayout.planetRadius(len, degree[it.id] ?: 0), now - it.updatedAt < 86_400_000L || it.pinned, style.main, style)
         }
     }
     val dashed = remember(suggestions, showSuggestions) {

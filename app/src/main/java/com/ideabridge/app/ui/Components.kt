@@ -3,6 +3,7 @@ package com.ideabridge.app.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -28,6 +29,7 @@ fun IdeaError.messageRes(): Int = when (this) {
     IdeaError.EmptyGalaxyName -> R.string.err_empty_galaxy_name
     IdeaError.GalaxyNameTooLong -> R.string.err_galaxy_name_too_long
     IdeaError.GalaxyNotFound -> R.string.err_galaxy_not_found
+    IdeaError.TrashItemNotFound -> R.string.err_trash_not_found
     IdeaError.Unknown -> R.string.err_unknown
 }
 
@@ -99,7 +101,15 @@ fun IdeaCard(idea: IdeaEntity, onClick: () -> Unit) {
         ),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(idea.title, style = MaterialTheme.typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(idea.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                if (idea.pinned) {
+                    Icon(
+                        Icons.Filled.Star, contentDescription = stringResource(R.string.pinned),
+                        tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
             idea.description?.let {
                 Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 2)
             }

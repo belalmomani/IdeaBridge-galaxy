@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -61,6 +62,7 @@ fun NoteEditorScreen(
     initialNoteId: Long,
     initialTitle: String,
     initialBody: String,
+    initialPinned: Boolean,
     relationsOf: (Long) -> Flow<List<RelationRow>>,
     save: suspend (noteId: Long, title: String, body: String) -> SaveResult<Long>,
     onBack: () -> Unit,
@@ -71,11 +73,13 @@ fun NoteEditorScreen(
     onError: (IdeaError) -> Unit,
     suggestGalaxy: suspend (noteId: Long) -> GalaxyMove?,
     onMove: (noteId: Long, galaxyId: Long) -> Unit,
+    onTogglePin: (noteId: Long, pinned: Boolean, done: (Boolean) -> Unit) -> Unit,
 ) {
     var title by rememberSaveable { mutableStateOf(initialTitle) }
     var bodyField by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(initialBody)) }
     val body = bodyField.text
     var noteId by rememberSaveable { mutableStateOf(initialNoteId) }
+    var pinned by rememberSaveable { mutableStateOf(initialPinned) }
     var status by remember { mutableStateOf(SaveStatus.Idle) }
     var saving by remember { mutableStateOf(false) }
     var dirty by remember { mutableStateOf(false) }
@@ -158,6 +162,19 @@ fun NoteEditorScreen(
                 style = MaterialTheme.typography.labelMedium,
                 color = if (status == SaveStatus.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (noteId != 0L) {
+                IconButton(onClick = {
+                    val target = !pinned
+                    pinned = target
+                    onTogglePin(noteId, target) { ok -> if (!ok) pinned = !target }
+                }) {
+                    Icon(
+                        Icons.Filled.Star,
+                        contentDescription = stringResource(if (pinned) R.string.unpin_note else R.string.pin_note),
+                        tint = if (pinned) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                    )
+                }
+            }
             val shareText = NoteShare.format(title, body)
             if (shareText.isNotBlank()) {
                 IconButton(

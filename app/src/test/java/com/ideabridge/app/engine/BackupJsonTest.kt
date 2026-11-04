@@ -20,7 +20,7 @@ class BackupJsonTest {
             galaxies = listOf(GalaxyEntity(1, "ملاحظاتي", 0, 10L)),
             notes = listOf(
                 IdeaEntity(1, "عنوان", null, 11L, 12L, 1),
-                IdeaEntity(2, "فيها \"اقتباس\"", "سطر1\nسطر2", 13L, 14L, 1),
+                IdeaEntity(2, "فيها \"اقتباس\"", "سطر1\nسطر2", 13L, 14L, 1, true),
             ),
             relations = listOf(RelationEntity(1, 1, 2, RelationType.CAUSE, 15L)),
             exportedAt = 99L,
@@ -31,6 +31,8 @@ class BackupJsonTest {
         assertTrue(json.contains("\"title\": \"عنوان\", \"body\": \"\""))
         assertTrue(json.contains("فيها \\\"اقتباس\\\""))
         assertTrue(json.contains("سطر1\\nسطر2"))
+        assertTrue(json.contains("\"pinned\": true"))
+        assertTrue(json.contains("\"pinned\": false"))
         assertTrue(json.contains("\"type\": \"CAUSE\""))
         assertEquals(json.count { it == '{' }, json.count { it == '}' })
         assertEquals(json.count { it == '[' }, json.count { it == ']' })

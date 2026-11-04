@@ -4,6 +4,8 @@ import androidx.room.withTransaction
 import com.ideabridge.app.IdeaError
 import com.ideabridge.app.IdeaException
 import com.ideabridge.app.IdeaRules
+import com.ideabridge.app.engine.BackupJson
+import com.ideabridge.app.engine.BackupParser
 import com.ideabridge.app.SaveResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -51,6 +53,11 @@ class IdeaRepository(
         db.withTransaction { Snapshot(dao.getAllGalaxies(), dao.getAllIdeas(), dao.getAllRelations()) }
     }
 
+    /** تثبيت/إلغاء تثبيت ملاحظة دون تغيير نصها أو تاريخ تعديلها. */
+    suspend fun setPinned(id: Long, pinned: Boolean): SaveResult<Unit> = safely {
+        if (dao.setPinned(id, pinned) == 0) throw IdeaException(IdeaError.IdeaNotFound)
+    }
+
     // ---------- التقاط واستعادة (التراجع عن الحذف) ----------
     suspend fun captureNote(id: Long): SaveResult<DeletedSnapshot> = safely {
         db.withTransaction {
@@ -77,6 +84,12 @@ class IdeaRepository(
      */
     suspend fun restore(snapshot: DeletedSnapshot): SaveResult<Unit> = safely {
         db.withTransaction {
+            restoreInternal(snapshot)
+            if (snapshot.trashId != 0L) dao.deleteTrash(snapshot.trashId) // تراجع فوري: لا نسخة مكررة في السلة
+        }
+    }
+
+    private suspend fun restoreInternal(snapshot: DeletedSnapshot) {
             snapshot.galaxy?.let { dao.restoreGalaxy(it) }
             val notes = snapshot.notes.map { n ->
                 if (dao.getGalaxy(n.galaxyId) == null) n.copy(galaxyId = ensureDefaultGalaxyInternal()) else n
@@ -86,8 +99,85 @@ class IdeaRepository(
                 dao.getById(it.firstIdeaId) != null && dao.getById(it.secondIdeaId) != null
             }
             dao.restoreRelations(relations)
+    }
+
+    // ---------- سلة المحذوفات ----------
+    fun observeTrash(): Flow<List<TrashRow>> = dao.observeTrash()
+
+    private suspend fun captureNoteInternal(id: Long): DeletedSnapshot {
+        val note = dao.getById(id) ?: throw IdeaException(IdeaError.IdeaNotFound)
+        return DeletedSnapshot(null, listOf(note), dao.getRelationsOfIdea(id))
+    }
+
+    private suspend fun captureGalaxyInternal(id: Long): DeletedSnapshot {
+        val galaxy = dao.getGalaxy(id) ?: throw IdeaException(IdeaError.GalaxyNotFound)
+        return DeletedSnapshot(galaxy, dao.getIdeasOfGalaxy(id), dao.getRelationsOfGalaxy(id))
+    }
+
+    /** يحفظ نسخة كاملة مما حُذف في السلة؛ يعيد 0 إن كان حجمها أكبر من الحد (يبقى التراجع الفوري متاحًا). */
+    private suspend fun storeInTrash(snapshot: DeletedSnapshot, kind: String, title: String): Long {
+        val galaxies = snapshot.galaxy?.let { listOf(it) }
+            ?: snapshot.notes.map { it.galaxyId }.distinct().mapNotNull { dao.getGalaxy(it) }
+        val payload = BackupJson.toJson(galaxies, snapshot.notes, snapshot.relations, clock())
+        if (payload.length > MAX_TRASH_PAYLOAD) return 0L
+        return dao.insertTrash(
+            TrashEntity(kind = kind, title = title, noteCount = snapshot.notes.size, deletedAt = clock(), payload = payload)
+        )
+    }
+
+    /** يحذف الملاحظة ويحفظها في السلة في معاملة واحدة، ويعيد ما حُذف للتراجع الفوري. */
+    suspend fun deleteNoteToTrash(id: Long): SaveResult<DeletedSnapshot> = safely {
+        db.withTransaction {
+            val snapshot = captureNoteInternal(id)
+            dao.deleteRelationsOf(id)
+            if (dao.deleteIdea(id) == 0) throw IdeaException(IdeaError.IdeaNotFound)
+            snapshot.copy(trashId = storeInTrash(snapshot, TrashKind.NOTE, snapshot.notes.first().title))
         }
     }
+
+    /** يحذف المجرة وملاحظاتها وروابطها ويحفظها في السلة في معاملة واحدة. */
+    suspend fun deleteGalaxyToTrash(id: Long): SaveResult<DeletedSnapshot> = safely {
+        db.withTransaction {
+            val snapshot = captureGalaxyInternal(id)
+            dao.deleteRelationsOfGalaxy(id)
+            dao.deleteIdeasOfGalaxy(id)
+            if (dao.deleteGalaxy(id) == 0) throw IdeaException(IdeaError.GalaxyNotFound)
+            snapshot.copy(trashId = storeInTrash(snapshot, TrashKind.GALAXY, snapshot.galaxy?.name.orEmpty()))
+        }
+    }
+
+    /** يعيد عنصرًا من السلة بمعرفاته وتواريخه، ثم يزيله منها. لا يستبدل شيئًا موجودًا. */
+    suspend fun restoreFromTrash(trashId: Long): SaveResult<Unit> = safely {
+        db.withTransaction {
+            val payload = dao.getTrashPayload(trashId) ?: throw IdeaException(IdeaError.TrashItemNotFound)
+            val parsed = (BackupParser.parse(payload) as? BackupParser.Result.Ok)?.backup
+                ?: throw IdeaException(IdeaError.Unknown)
+            restoreInternal(snapshotOf(parsed))
+            dao.deleteTrash(trashId)
+        }
+    }
+
+    private fun snapshotOf(backup: ParsedBackup): DeletedSnapshot = DeletedSnapshot(
+        galaxy = backup.galaxies.firstOrNull()?.let { GalaxyEntity(it.id, it.name, it.colorIndex, it.createdAt) },
+        notes = backup.notes.map {
+            IdeaEntity(
+                id = it.id, title = it.title, description = IdeaRules.cleanDescription(it.body),
+                createdAt = it.createdAt, updatedAt = it.updatedAt, galaxyId = it.galaxyId, pinned = it.pinned,
+            )
+        },
+        relations = backup.relations.map {
+            RelationEntity(firstIdeaId = it.firstNoteId, secondIdeaId = it.secondNoteId, type = it.type, createdAt = clock())
+        },
+    )
+
+    suspend fun deleteForever(trashId: Long): SaveResult<Unit> = safely {
+        if (dao.deleteTrash(trashId) == 0) throw IdeaException(IdeaError.TrashItemNotFound)
+    }
+
+    suspend fun emptyTrash(): SaveResult<Unit> = safely { dao.clearTrash(); Unit }
+
+    /** يحذف نهائيًا ما مضى عليه في السلة أكثر من 30 يومًا. */
+    suspend fun purgeTrash(): SaveResult<Unit> = safely { dao.purgeTrashBefore(clock() - TRASH_RETENTION_MS); Unit }
 
     // ---------- اقتراحات مرفوضة وروابط ----------
     fun observeRejected(): Flow<Set<String>> = dao.observeRejectedKeys().map { it.toSet() }
@@ -137,7 +227,7 @@ class IdeaRepository(
                     val updated = if (n.updatedAt > 0) n.updatedAt else created
                     val entity = IdeaEntity(
                         title = n.title, description = IdeaRules.cleanDescription(n.body),
-                        createdAt = created, updatedAt = updated, galaxyId = galaxyId,
+                        createdAt = created, updatedAt = updated, galaxyId = galaxyId, pinned = n.pinned,
                     )
                     val newId = dao.insertIdea(entity)
                     notes.add(entity.copy(id = newId))
@@ -249,4 +339,9 @@ class IdeaRepository(
         } catch (e: Exception) {
             SaveResult.Failure(IdeaError.Unknown)
         }
+
+    companion object {
+        const val TRASH_RETENTION_MS = 30L * 24 * 60 * 60 * 1000
+        const val MAX_TRASH_PAYLOAD = 1_500_000
+    }
 }

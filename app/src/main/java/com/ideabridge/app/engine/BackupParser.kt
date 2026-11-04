@@ -44,6 +44,7 @@ object BackupParser {
                     ParsedNote(
                         id = o.getLong("id"), galaxyId = o.optLong("galaxyId", 0L), title = title, body = body,
                         createdAt = o.optLong("createdAt", 0L), updatedAt = o.optLong("updatedAt", 0L),
+                        pinned = o.optBoolean("pinned", false),
                     )
                 )
             }

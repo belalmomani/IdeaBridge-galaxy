@@ -24,7 +24,7 @@ interface IdeaDao {
         "SELECT * FROM ideas WHERE title LIKE '%' || :pattern || '%' ESCAPE '\\' " +
             "OR IFNULL(description, '') LIKE '%' || :pattern || '%' ESCAPE '\\' " +
             "OR galaxyId IN (SELECT id FROM galaxies WHERE name LIKE '%' || :pattern || '%' ESCAPE '\\') " +
-            "ORDER BY updatedAt DESC, id DESC"
+            "ORDER BY pinned DESC, updatedAt DESC, id DESC"
     )
     fun observe(pattern: String): Flow<List<IdeaEntity>>
 
@@ -59,6 +59,9 @@ interface IdeaDao {
 
     @Query("UPDATE ideas SET galaxyId = :galaxyId WHERE id = :id")
     suspend fun moveIdea(id: Long, galaxyId: Long): Int
+
+    @Query("UPDATE ideas SET pinned = :pinned WHERE id = :id")
+    suspend fun setPinned(id: Long, pinned: Boolean): Int
 
     // ---------- المجرات ----------
     @Insert(onConflict = OnConflictStrategy.ABORT)
@@ -100,7 +103,7 @@ interface IdeaDao {
     @Query(
         "SELECT * FROM ideas WHERE galaxyId = :galaxyId AND (title LIKE '%' || :pattern || '%' ESCAPE '\\' " +
             "OR IFNULL(description, '') LIKE '%' || :pattern || '%' ESCAPE '\\') " +
-            "ORDER BY updatedAt DESC, id DESC"
+            "ORDER BY pinned DESC, updatedAt DESC, id DESC"
     )
     fun observeInGalaxy(galaxyId: Long, pattern: String): Flow<List<IdeaEntity>>
 
@@ -152,4 +155,23 @@ interface IdeaDao {
             "OR secondIdeaId IN (SELECT id FROM ideas WHERE galaxyId = :galaxyId) ORDER BY id"
     )
     suspend fun getRelationsOfGalaxy(galaxyId: Long): List<RelationEntity>
+
+    // ---------- سلة المحذوفات ----------
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertTrash(item: TrashEntity): Long
+
+    @Query("SELECT id, kind, title, noteCount, deletedAt FROM trash ORDER BY deletedAt DESC, id DESC")
+    fun observeTrash(): Flow<List<TrashRow>>
+
+    @Query("SELECT payload FROM trash WHERE id = :id")
+    suspend fun getTrashPayload(id: Long): String?
+
+    @Query("DELETE FROM trash WHERE id = :id")
+    suspend fun deleteTrash(id: Long): Int
+
+    @Query("DELETE FROM trash WHERE deletedAt < :before")
+    suspend fun purgeTrashBefore(before: Long): Int
+
+    @Query("DELETE FROM trash")
+    suspend fun clearTrash(): Int
 }
