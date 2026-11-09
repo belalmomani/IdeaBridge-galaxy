@@ -63,6 +63,8 @@ fun NoteEditorScreen(
     initialTitle: String,
     initialBody: String,
     initialPinned: Boolean,
+    /** true عند فتح المحرر بنص جاهز (مُشارَك من تطبيق آخر): يُحفظ فورًا دون انتظار أول تعديل. */
+    saveOnOpen: Boolean = false,
     relationsOf: (Long) -> Flow<List<RelationRow>>,
     save: suspend (noteId: Long, title: String, body: String) -> SaveResult<Long>,
     onBack: () -> Unit,
@@ -135,6 +137,8 @@ fun NoteEditorScreen(
         delay(700)
         flush()
     }
+
+    LaunchedEffect(Unit) { if (saveOnOpen) flush() }
 
     // عند الخروج ننتظر انتهاء أي حفظ جارٍ ثم نحفظ آخر نص قبل العودة
     fun leave() {

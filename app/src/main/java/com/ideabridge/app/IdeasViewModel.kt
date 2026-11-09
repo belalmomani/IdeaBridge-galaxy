@@ -21,6 +21,7 @@ import com.ideabridge.app.engine.BackupParser
 import com.ideabridge.app.engine.GalaxyDoc
 import com.ideabridge.app.engine.GalaxyMatcher
 import com.ideabridge.app.engine.IdeaDoc
+import com.ideabridge.app.engine.Incoming
 import com.ideabridge.app.engine.LinkEngine
 import com.ideabridge.app.engine.LinkSuggestion
 import com.ideabridge.app.engine.SearchMatcher
@@ -138,6 +139,10 @@ class IdeasViewModel(app: Application) : AndroidViewModel(app) {
     fun setPinned(noteId: Long, pinned: Boolean, onResult: (SaveResult<Unit>) -> Unit) {
         viewModelScope.launch { onResult(repo.setPinned(noteId, pinned)) }
     }
+
+    private var pendingShare: Incoming.SharedText? = null
+    fun setPendingShare(share: Incoming.SharedText) { pendingShare = share }
+    fun consumePendingShare(): Incoming.SharedText? = pendingShare.also { pendingShare = null }
 
     fun moveNote(noteId: Long, galaxyId: Long, onResult: (SaveResult<Unit>) -> Unit) {
         viewModelScope.launch { onResult(repo.moveIdea(noteId, galaxyId)) }

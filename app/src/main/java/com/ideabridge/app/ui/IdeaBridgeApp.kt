@@ -28,6 +28,7 @@ import com.ideabridge.app.IdeaRules
 import com.ideabridge.app.R
 import com.ideabridge.app.SaveResult
 import com.ideabridge.app.data.DeletedSnapshot
+import com.ideabridge.app.engine.Incoming
 import com.ideabridge.app.data.ImportOutcome
 import kotlinx.coroutines.launch
 
@@ -48,7 +49,12 @@ private class Nav(
 )
 
 @Composable
-fun IdeaBridgeApp(vm: IdeasViewModel = viewModel()) {
+fun IdeaBridgeApp(
+    incoming: Incoming? = null,
+    onIncomingConsumed: () -> Unit = {},
+    lock: AppLockState,
+    vm: IdeasViewModel = viewModel(),
+) {
     // فرض اتجاه RTL لكل عناصر الواجهة
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         val snackbar = remember { SnackbarHostState() }
@@ -81,6 +87,23 @@ fun IdeaBridgeApp(vm: IdeasViewModel = viewModel()) {
         }
         BackHandler(enabled = stack.size > 1) { nav.pop() }
 
+        // نص مُشارَك من تطبيق آخر، أو اختصار «ملاحظة جديدة»: نفتح محررًا جديدًا (مع النص إن وُجد) من الرئيسية
+        LaunchedEffect(incoming) {
+            when (val event = incoming) {
+                is Incoming.SharedText -> {
+                    vm.setPendingShare(event)
+                    nav.top("home")
+                    nav.push("note/0/0")
+                }
+                Incoming.NewNote -> {
+                    nav.top("home")
+                    nav.push("note/0/0")
+                }
+                null -> return@LaunchedEffect
+            }
+            onIncomingConsumed()
+        }
+
         val msgSoon = stringResource(R.string.msg_coming_soon)
         val isTopLevel = route == "home" || route == "notes" || route == "links" || route == "settings"
 
@@ -111,7 +134,7 @@ fun IdeaBridgeApp(vm: IdeasViewModel = viewModel()) {
                     "home" -> GalaxiesRoute(vm, nav)
                     "notes" -> NotesRoute(vm, nav)
                     "links" -> LinksRoute(vm, nav)
-                    "settings" -> SettingsRoute(vm, nav)
+                    "settings" -> SettingsRoute(vm, nav, lock)
                     "trash" -> TrashRoute(vm, nav)
                     "galaxy" -> GalaxyRoute(a, vm, nav)
                     "note" -> NoteRoute(galaxyId = a, noteId = b, vm = vm, nav = nav)
@@ -278,9 +301,28 @@ private fun TrashRoute(vm: IdeasViewModel, nav: Nav) {
 }
 
 @Composable
-private fun SettingsRoute(vm: IdeasViewModel, nav: Nav) {
+private fun SettingsRoute(vm: IdeasViewModel, nav: Nav, lock: AppLockState) {
     val context = LocalContext.current
+    val msgLockOn = stringResource(R.string.msg_lock_enabled)
+    val msgLockOff = stringResource(R.string.msg_lock_disabled)
+    val msgNeedDeviceLock = stringResource(R.string.settings_lock_need_device_lock)
+    // التفعيل يتطلب تأكيد قفل الجهاز أولًا، ولا يُفعَّل أصلًا إن لم يكن للهاتف قفل
+    val confirmToEnable = rememberConfirmDeviceCredential(
+        title = stringResource(R.string.lock_prompt_title),
+        description = stringResource(R.string.lock_prompt_desc),
+        onNotAvailable = { nav.say(msgNeedDeviceLock) },
+        onResult = { ok -> if (ok) { lock.setEnabled(true); nav.say(msgLockOn) } },
+    )
     SettingsScreen(
+        lockEnabled = lock.enabled,
+        onToggleLock = { wantEnabled ->
+            if (wantEnabled) {
+                if (deviceHasSecureLock(context)) confirmToEnable() else nav.say(msgNeedDeviceLock)
+            } else {
+                lock.setEnabled(false)
+                nav.say(msgLockOff)
+            }
+        },
         onOpenTrash = { nav.push("trash") },
         onExport = { uri ->
             vm.exportBackup(uri) { ok ->
@@ -308,7 +350,9 @@ private fun SettingsRoute(vm: IdeasViewModel, nav: Nav) {
 @Composable
 private fun NoteRoute(galaxyId: Long, noteId: Long, vm: IdeasViewModel, nav: Nav) {
     if (noteId == 0L) {
-        EditorHost(galaxyId, 0L, "", "", false, vm, nav)
+        // نص مُشارَك ينتظر في الـ ViewModel: يُقرأ مرة واحدة ويُحفظ فورًا ملاحظةً جديدة
+        val seed = remember { vm.consumePendingShare() }
+        EditorHost(galaxyId, 0L, seed?.title.orEmpty(), seed?.body.orEmpty(), false, seed != null, vm, nav)
         return
     }
     val state by remember(noteId) { vm.idea(noteId) }.collectAsStateWithLifecycle(initialValue = null)
@@ -325,19 +369,23 @@ private fun NoteRoute(galaxyId: Long, noteId: Long, vm: IdeasViewModel, nav: Nav
             // العنوان المشتق من أول سطر لا يُكرَّر في حقل العنوان
             val title = if (IdeaRules.effectiveTitle("", body) == note.title) "" else note.title
             // القيم الابتدائية تُقرأ مرة واحدة فقط، فلا يُعاد ضبط المحرر مع كل تحديث للقاعدة أثناء الكتابة
-            EditorHost(galaxyId, noteId, title, body, note.pinned, vm, nav)
+            EditorHost(galaxyId, noteId, title, body, note.pinned, false, vm, nav)
         }
     }
 }
 
 @Composable
-private fun EditorHost(galaxyId: Long, noteId: Long, title: String, body: String, pinned: Boolean, vm: IdeasViewModel, nav: Nav) {
+private fun EditorHost(
+    galaxyId: Long, noteId: Long, title: String, body: String, pinned: Boolean, saveOnOpen: Boolean,
+    vm: IdeasViewModel, nav: Nav,
+) {
     val context = LocalContext.current
     NoteEditorScreen(
         initialNoteId = noteId,
         initialTitle = title,
         initialBody = body,
         initialPinned = pinned,
+        saveOnOpen = saveOnOpen,
         relationsOf = vm::relations,
         save = { id, t, b -> vm.saveNote(id, galaxyId, t, b) },
         onBack = nav.pop,
