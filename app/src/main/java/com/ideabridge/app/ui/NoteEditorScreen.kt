@@ -3,6 +3,7 @@ package com.ideabridge.app.ui
 import android.content.Context
 import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -296,7 +297,7 @@ fun NoteEditorScreen(
         }
         // شريط أدوات القوائم فوق لوحة المفاتيح مباشرة
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             fun applyEdit(edit: ListEditing.Edit) {
@@ -312,6 +313,10 @@ fun NoteEditorScreen(
             AssistChip(
                 onClick = { applyEdit(ListEditing.toggleDone(bodyField.text, bodyField.selection.end)) },
                 label = { Text(stringResource(R.string.fmt_done)) },
+            )
+            AssistChip(
+                onClick = { applyEdit(ListEditing.toggleNumbered(bodyField.text, bodyField.selection.start, bodyField.selection.end)) },
+                label = { Text(stringResource(R.string.fmt_numbered)) },
             )
             AssistChip(
                 onClick = { applyEdit(ListEditing.toggleBullet(bodyField.text, bodyField.selection.start, bodyField.selection.end)) },

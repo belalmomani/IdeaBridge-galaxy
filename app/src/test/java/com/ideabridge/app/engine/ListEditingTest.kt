@@ -53,4 +53,33 @@ class ListEditingTest {
         assertEquals("خبز", IdeaRules.effectiveTitle("", "☐ \n• خبز"))
         assertEquals("عنواني", IdeaRules.effectiveTitle("عنواني", "☐ شراء"))
     }
+
+    @Test fun numberingAssignsSequentialNumbersAndSkipsBlankLines() {
+        assertEquals("1. حليب\n2. خبز\n3. بيض", ListEditing.toggleNumbered("حليب\nخبز\nبيض", 0, 11).text)
+        assertEquals("1. أ\n\n2. ب", ListEditing.toggleNumbered("أ\n\nب", 0, 4).text)
+        assertEquals("1. ", ListEditing.toggleNumbered("", 0, 0).text)
+    }
+
+    @Test fun numberingTogglesOffAndConvertsOtherListTypes() {
+        assertEquals("حليب\nخبز", ListEditing.toggleNumbered("1. حليب\n2. خبز", 0, 13).text)
+        assertEquals("1. أ\n2. ب", ListEditing.toggleNumbered("☐ أ\n• ب", 0, 6).text)
+        assertEquals("1. أ\n2. ب", ListEditing.toggleNumbered("1. أ\nب", 0, 6).text) // مختلط: يُعاد ترقيم الكل
+    }
+
+    @Test fun enterContinuesANumberedListWithTheNextNumber() {
+        assertEquals(ListEditing.Edit("1. أ\n2. ", 8, 8), ListEditing.continueList("1. أ", "1. أ\n", 5))
+        assertEquals(ListEditing.Edit("9. أ\n10. ", 9, 9), ListEditing.continueList("9. أ", "9. أ\n", 5))
+        assertEquals(ListEditing.Edit("5. a\n6. b", 8, 8), ListEditing.continueList("5. ab", "5. a\nb", 5))
+    }
+
+    @Test fun enterOnAnEmptyNumberedItemEndsTheListAndNonListTextIsUntouched() {
+        assertEquals(ListEditing.Edit("1. أ\n", 5, 5), ListEditing.continueList("1. أ\n2. ", "1. أ\n2. \n", 9))
+        assertNull(ListEditing.continueList("نص", "نص\n", 3))
+        assertNull(ListEditing.continueList("1.أ", "1.أ\n", 4)) // بلا مسافة بعد النقطة: ليس ترقيمًا
+    }
+
+    @Test fun numberedMarkersDoNotBecomeTheNoteTitle() {
+        assertEquals("شراء حليب", IdeaRules.effectiveTitle("", "1. شراء حليب\n2. خبز"))
+        assertEquals("نص 1. وسط", IdeaRules.effectiveTitle("", "نص 1. وسط"))
+    }
 }

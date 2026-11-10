@@ -218,4 +218,6 @@
     <string name="settings_lock_need_device_lock">فعّل قفل الشاشة في إعدادات هاتفك أولًا ثم أعد المحاولة</string>
     <string name="msg_lock_enabled">تم تفعيل قفل التطبيق</string>
     <string name="msg_lock_disabled">تم إيقاف قفل التطبيق</string>
+
+    <string name="fmt_numbered">1. ترقيم</string>
 </resources>

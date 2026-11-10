@@ -1,7 +1,7 @@
 package com.ideabridge.app.engine
 
 /**
- * تحرير القوائم داخل نص الملاحظة العادي: قائمة مهام (☐ / ☑) ونقاط (•).
+ * تحرير القوائم داخل نص الملاحظة العادي: قائمة مهام (☐ / ☑) ونقاط (•) وقوائم مرقّمة (1. 2. 3.).
  * النص يبقى نصًا عاديًا، فيُبحث فيه ويُصدَّر ويُستورد كما هو. دوال بحتة بلا اعتماد على Android.
  */
 object ListEditing {
@@ -9,6 +9,7 @@ object ListEditing {
     const val CHECKED = "☑ "
     const val BULLET = "• "
     private val MARKERS = listOf(UNCHECKED, CHECKED, BULLET)
+    private val NUMBERED = Regex("^(\\d{1,4})\\. ")
 
     data class Edit(val text: String, val selStart: Int, val selEnd: Int)
 
@@ -25,6 +26,7 @@ object ListEditing {
             if (line.startsWith(m)) return line.substring(m.length)
             if (line == m.trim()) return ""
         }
+        NUMBERED.find(line)?.let { return line.substring(it.value.length) }
         return line
     }
 
@@ -57,6 +59,29 @@ object ListEditing {
         return Edit(text.substring(0, from) + block + text.substring(to), cursor, cursor)
     }
 
+    /** يرقّم الأسطر المحددة (1. 2. 3.) بالتتابع متجاهلًا الأسطر الفارغة، أو يزيل الترقيم إن كانت كلها مرقّمة. */
+    fun toggleNumbered(text: String, selStart: Int, selEnd: Int): Edit {
+        val start = minOf(selStart, selEnd).coerceIn(0, text.length)
+        var end = maxOf(selStart, selEnd).coerceIn(0, text.length)
+        if (end > start && text[end - 1] == '\n') end -= 1
+        val from = lineStart(text, start)
+        val to = lineEnd(text, end)
+        val lines = text.substring(from, to).split('\n')
+        val nonBlank = lines.filter { it.isNotBlank() }
+        val removing = nonBlank.isNotEmpty() && nonBlank.all { NUMBERED.containsMatchIn(it) }
+        var counter = 0
+        val result = lines.map { line ->
+            when {
+                removing -> stripMarker(line)
+                line.isBlank() && lines.size > 1 -> line
+                else -> { counter++; "$counter. " + stripMarker(line) }
+            }
+        }
+        val block = result.joinToString("\n")
+        val cursor = from + block.length
+        return Edit(text.substring(0, from) + block + text.substring(to), cursor, cursor)
+    }
+
     /** يبدّل ☐ ↔ ☑ في السطر الذي فيه المؤشر؛ لا يغيّر شيئًا إن لم يكن السطر مهمة. */
     fun toggleDone(text: String, cursor: Int): Edit {
         val c = cursor.coerceIn(0, text.length)
@@ -81,11 +106,17 @@ object ListEditing {
         if (newText.removeRange(pos, pos + 1) != oldText) return null
         val start = lineStart(newText, pos)
         val line = newText.substring(start, pos)
-        val marker = MARKERS.firstOrNull { line.startsWith(it) } ?: return null
+        val simple = MARKERS.firstOrNull { line.startsWith(it) }
+        val numbered = if (simple == null) NUMBERED.find(line) else null
+        val marker = simple ?: numbered?.value ?: return null
         if (line.removePrefix(marker).isBlank()) {
             return Edit(newText.substring(0, start) + newText.substring(pos + 1), start, start)
         }
-        val next = if (marker == BULLET) BULLET else UNCHECKED
+        val next = when {
+            simple == BULLET -> BULLET
+            numbered != null -> "${(numbered.groupValues[1].toIntOrNull() ?: 0) + 1}. "
+            else -> UNCHECKED
+        }
         val cursor = newCursor + next.length
         return Edit(newText.substring(0, newCursor) + next + newText.substring(newCursor), cursor, cursor)
     }
