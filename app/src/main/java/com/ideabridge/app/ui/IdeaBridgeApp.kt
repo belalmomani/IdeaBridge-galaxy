@@ -311,7 +311,7 @@ private fun SettingsRoute(vm: IdeasViewModel, nav: Nav, lock: AppLockState) {
         title = stringResource(R.string.lock_prompt_title),
         description = stringResource(R.string.lock_prompt_desc),
         onNotAvailable = { nav.say(msgNeedDeviceLock) },
-        onResult = { ok -> if (ok) { lock.setEnabled(true); nav.say(msgLockOn) } },
+        onResult = { ok -> if (ok) { lock.changeEnabled(true); nav.say(msgLockOn) } },
     )
     SettingsScreen(
         lockEnabled = lock.enabled,
@@ -319,7 +319,7 @@ private fun SettingsRoute(vm: IdeasViewModel, nav: Nav, lock: AppLockState) {
             if (wantEnabled) {
                 if (deviceHasSecureLock(context)) confirmToEnable() else nav.say(msgNeedDeviceLock)
             } else {
-                lock.setEnabled(false)
+                lock.changeEnabled(false)
                 nav.say(msgLockOff)
             }
         },

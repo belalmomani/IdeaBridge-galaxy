@@ -36,7 +36,8 @@ class AppLockState(private val prefs: SharedPreferences) {
         private set
     private var backgroundedAt = 0L
 
-    fun setEnabled(value: Boolean) {
+    /** يفعّل القفل أو يوقفه (الاسم يختلف عن setter الخاصية enabled لتفادي تصادم توقيع JVM). */
+    fun changeEnabled(value: Boolean) {
         enabled = value
         prefs.edit().putBoolean(KEY_ENABLED, value).apply()
         locked = false
